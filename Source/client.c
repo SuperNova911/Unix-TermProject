@@ -22,6 +22,11 @@ enum Command
     SampleCommand1, SampleCommand2
 };
 
+enum ClientStatus
+{
+    Login, LectureBrowser, Lobby, Chat
+} CurrentClientStatus;
+
 typedef struct DataPack_t
 {
     enum Command command;
@@ -32,11 +37,15 @@ typedef struct DataPack_t
 bool connectServer();
 void async();
 void receiveData();
-
-// 통신
-bool decomposeDataPack(DataPack *dataPack);
 bool sendDataPack(DataPack *dataPack);
+
+bool decomposeDataPack(DataPack *dataPack);
 void sendSampleDataPack();
+
+void getUserInput();
+void receiveUserCommand();
+void updateCommandList();
+void updateUserInput();
 
 // 인터페이스
 void initiateInterface();
@@ -48,6 +57,9 @@ int ServerSocket;
 int Fdmax;
 fd_set Master, Reader;
 
+char UserInputGuide[256] = { 0, };
+char UserInputBuffer[256] = { 0, };
+
 WINDOW *MessageWindow, *MessageWindowBorder;
 WINDOW *CommandWindow, *CommandWindowBorder;
 WINDOW *UserInputWindow, *UserInputWindowBorder;
@@ -57,7 +69,18 @@ int main()
     atexit(onClose);
     initiateInterface();
 
-    connectServer();
+    if (connectServer())
+    {
+        CurrentClientStatus = Lobby;
+        strncpy(UserInputGuide, "Your Command", sizeof(UserInputGuide));
+        updateCommandList();
+        updateUserInput();
+    }
+    else
+    {
+
+    }
+
     async();
 
     return 0;
@@ -129,10 +152,7 @@ void async()
             }
             else if (fd == 0)   // stdin
             {
-                if (getchar() == 13)
-                {
-                    sendSampleDataPack();
-                }
+                getUserInput();
             }
             else
             {
@@ -249,6 +269,110 @@ void sendSampleDataPack()
     wrefresh(MessageWindow);
 }
 
+// 사용자의 키 입력을 읽어옴
+void getUserInput()
+{
+    int userInput;
+
+    userInput = getchar();
+    switch (userInput)
+    {
+        // 엔터
+        case 13:
+            sendSampleDataPack();
+            memset(UserInputBuffer, 0, sizeof(UserInputBuffer));
+            break;
+
+        // 백스페이스
+        case 127:
+            if (strlen(UserInputBuffer) > 0)
+            {
+                UserInputBuffer[strlen(UserInputBuffer) - 1] = 0;
+            }
+            break;
+
+        default:
+            if (32 <= userInput && userInput <= 126)
+            {
+                if (strlen(UserInputBuffer) < sizeof(UserInputBuffer) + 1)
+                {
+                    UserInputBuffer[strlen(UserInputBuffer)] = (char)userInput;
+                }
+            }
+    }
+
+    updateUserInput();
+}
+
+// 사용자가 입력한 Command를 처리
+void receiveUserCommand()
+{
+    if (strlen(UserInputBuffer) < 1)
+        return;
+
+    switch (CurrentClientStatus)
+    {
+        case Login:
+            break;
+        
+        case Lobby:
+            switch (atoi(UserInputBuffer))
+            {
+                case 1:
+                    break;
+                case 2:
+                    break;
+                case 3:
+                    break;
+                default:
+                    break;
+            }
+            break;
+
+        case Chat:
+            break;
+
+        default:
+            break;
+    }
+}
+
+// CommandWindow의 명령어 목록을 ClientStatus에 따라 업데이트
+void updateCommandList()
+{
+    wclear(CommandWindow);
+
+    switch (CurrentClientStatus)
+    {
+        case Login:
+            break;
+
+        case LectureBrowser:
+            wprintw(CommandWindow, "1: ShowLectureList\n2: EnterLecture\n\n9: Logout\n0: Exit program");
+        
+        case Lobby:
+            wprintw(CommandWindow, "1. ShowNotice\n2. AttendanceCheck\n3. ShowUserList\n4. LeaveLecture\n\n9: Logout\n0: Exit program");
+            break;
+            
+        case Chat:
+            wprintw(CommandWindow, "!quit: LeaveChat\n!user: ShowUserList");
+            break;
+
+        default:
+            break;
+    }
+
+    wrefresh(CommandWindow);
+}
+
+// UserInputWindow의 사용자 입력을 업데이트
+void updateUserInput()
+{
+    wclear(UserInputWindow);
+    wprintw(UserInputWindow, "%s: %s", UserInputGuide, UserInputBuffer);
+    wrefresh(UserInputWindow);
+}
+
 // ncurses라이브러리를 이용한 사용자 인터페이스 초기화
 void initiateInterface()
 {
@@ -259,7 +383,7 @@ void initiateInterface()
     int parentX, parentY;
     getmaxyx(stdscr, parentY, parentX);
 
-    int commandWindowBorderWidth = 20;
+    int commandWindowBorderWidth = 22;
     int userInputWindowBorderHeight = 4;
 
     MessageWindow = newwin(parentY - userInputWindowBorderHeight - 2, parentX - commandWindowBorderWidth - 2, 1, 1);

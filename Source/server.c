@@ -34,10 +34,10 @@ bool initiateServer();
 void async();
 void acceptClient();
 void receiveData(int socket);
+bool sendDataPack(int receiver, DataPack *dataPack);
 
 // 통신
 bool decomposeDataPack(int sender, DataPack *dataPack);
-bool sendDataPack(int receiver, DataPack *dataPack);
 
 // 인터페이스
 void initiateInterface();
