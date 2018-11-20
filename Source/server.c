@@ -23,21 +23,21 @@ enum Command
     SampleCommand1, SampleCommand2
 };
 
-typedef struct DataPack_t
+struct DataPack
 {
     enum Command command;
     char message[508];
-} DataPack;
+};
 
 // 서버
 bool initiateServer();
 void async();
-void acceptClient();
+void acceptClient(int socket);
 void receiveData(int socket);
 
 // 통신
-bool decomposeDataPack(int sender, DataPack *dataPack);
-bool sendDataPack(int receiver, DataPack *dataPack);
+bool receiveDataPack(int sender, struct DataPack *dataPack);
+bool sendDataPack(int receiver, struct DataPack *dataPack);
 
 // 인터페이스
 void initiateInterface();
@@ -65,14 +65,11 @@ int main()
     return 0;
 }
 
-// TCP/IP 소켓 서버 시작
-// [반환] true: 성공, false: 실패
 bool initiateServer()
 {
     wprintw(MessageWindow, "Initiate server\n");
     wrefresh(MessageWindow);
 
-    // TCP/IP 소켓
     ServerSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (ServerSocket == -1)
     {
@@ -105,13 +102,11 @@ bool initiateServer()
         return false;
     }
 
-    // 서버 시작 시간 저장
     time(&ServerUpTime);
 
     return true;
 }
 
-// 비 동기 입력 대기
 void async()
 {
     FD_ZERO(&Master);
@@ -121,6 +116,9 @@ void async()
 
     while (true)
     {
+        wprintw(MessageWindow, "Wait for data...\n");
+        wrefresh(MessageWindow);
+
         Reader = Master;
         if (select(Fdmax + 1, &Reader, NULL, NULL, NULL) == -1)
         {
@@ -136,7 +134,7 @@ void async()
 
             if (fd == ServerSocket)
             {
-                acceptClient();
+                acceptClient(fd);
             }
             else if (fd == 0)   // stdin
             {
@@ -150,46 +148,39 @@ void async()
     }
 }
 
-// 클라이언트 연결 요청 수락
-void acceptClient()
+void acceptClient(int socket)
 {
-    int newSocket;
     struct sockaddr_in clientAddr;
     socklen_t addrlen = sizeof(struct sockaddr_in);
 
-    newSocket = accept(ServerSocket, (struct sockaddr *)&clientAddr, &addrlen);
-    if (newSocket == -1)
+    socket = accept(ServerSocket, (struct sockaddr *)&clientAddr, &addrlen);
+    if (socket == -1)
     {
         wprintw(MessageWindow, "accept: %s\n", strerror(errno));
         wrefresh(MessageWindow);
     }
     else
     {
-        FD_SET(newSocket, &Master);
-        if (newSocket > Fdmax)
+        FD_SET(socket, &Master);
+        if (socket > Fdmax)
         {
-            Fdmax = newSocket;
+            Fdmax = socket;
         }
-        wprintw(MessageWindow, "Accept new client, socket: '%d'\n", newSocket);
+        wprintw(MessageWindow, "Accept new client, socket: '%d'\n", socket);
         wrefresh(MessageWindow);
     }
 }
 
-// 클라이언트로부터 받은 데이터를 분석
-// [매개변수] socket: 데이터를 받아올 클라이언트의 소켓
 void receiveData(int socket)
 {
     int readBytes;
-    char buffer[sizeof(DataPack)] = { 0, };
-
-    DataPack receivedDataPack;
-    DataPack *receivedDataPackPtr = &receivedDataPack;
-    memset(receivedDataPackPtr, 0, sizeof(DataPack));
+    struct DataPack *receivedDataPack;
+    // memset(receivedDataPack, 0, sizeof(struct DataPack));
+    char buffer[sizeof(struct DataPack)] = { 0, };
 
     readBytes = recv(socket, buffer, sizeof(buffer), 0);
     switch (readBytes)
     {
-        // 예외 처리
         case -1:
             close(socket);
             FD_CLR(socket, &Master);
@@ -197,7 +188,6 @@ void receiveData(int socket)
             wrefresh(MessageWindow);
             break;
 
-        // 클라이언트와 연결 종료
         case 0:
             close(socket);
             FD_CLR(socket, &Master);
@@ -205,12 +195,11 @@ void receiveData(int socket)
             wrefresh(MessageWindow);
             break;
 
-        // 받은 데이터 유효성 검사
         default:
-            if (readBytes == sizeof(DataPack))
+            if (readBytes == sizeof(struct DataPack))
             {
-                receivedDataPackPtr = (DataPack *)buffer;
-                decomposeDataPack(socket, receivedDataPackPtr);
+                receivedDataPack = (struct DataPack *)buffer;
+                receiveDataPack(socket, receivedDataPack);
             }
             else
             {
@@ -221,36 +210,16 @@ void receiveData(int socket)
     }
 }
 
-// 클라이언트에게 전송 받은 DataPack의 Command에 따라 지정된 작업을 수행
-// [매개변수] sender: DataPack을 전송한 클라이언트 소켓, dataPack: 전송 받은 DataPack
-// [반환] true: , false: 
-bool decomposeDataPack(int sender, DataPack *dataPack)
-{
-    wprintw(MessageWindow, "sender: '%d', command: '%d', message: '%s'\n", sender, dataPack->command, dataPack->message);
-    wrefresh(MessageWindow);
-
-    switch(dataPack->command)
-    {
-        case SampleCommand1:
-            break;
-
-        case SampleCommand2:
-            break;
-        
-        default:
-            break;
-    }
-}
-
-// 클라이언트에게 DataPack을 전송
-// [매개변수] receiver: 전송 대상 클라이언트 소켓, dataPack: 전송 할 DataPack
-// [반환] true: 전송 성공, false: 전송 실패
-bool sendDataPack(int receiver, DataPack *dataPack)
+bool receiveDataPack(int sender, struct DataPack *dataPack)
 {
     return false;
 }
 
-// ncurses라이브러리를 이용한 사용자 인터페이스 초기화
+bool sendDataPack(int receiver, struct DataPack *dataPack)
+{
+    return false;
+}
+
 void initiateInterface()
 {
     initscr();
@@ -284,18 +253,15 @@ void initiateInterface()
     wrefresh(UserInputWindow);
 }
 
-// 윈도우 테두리 그리기
-// [매개변수] window: 테두리를 그릴 윈도우, windowName: 상단에 보여줄 윈도우 이름
 void drawBorder(WINDOW *window, char *windowName)
 {
     int x, y;
     getmaxyx(window, y, x);
-
-    // 테두리 그리기
     mvwprintw(window, 0, 0, "+"); 
     mvwprintw(window, y - 1, 0, "+"); 
     mvwprintw(window, 0, x - 1, "+"); 
     mvwprintw(window, y - 1, x - 1, "+"); 
+
     for (int i = 1; i < (y - 1); i++)
     {
         mvwprintw(window, i, 0, "|"); 
@@ -307,16 +273,13 @@ void drawBorder(WINDOW *window, char *windowName)
         mvwprintw(window, y - 1, i, "-"); 
     }
 
-    // 윈도우 이름 출력
     mvwprintw(window, 0, 4, windowName); 
 
     wrefresh(window);
 }
 
-// 프로그램 종료시 수행
 void onClose()
 {
-    // ncurses윈도우 종료
     delwin(MessageWindow);
     delwin(MessageWindowBorder);
     delwin(CommandWindow);
