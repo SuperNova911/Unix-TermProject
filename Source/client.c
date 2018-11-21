@@ -20,8 +20,25 @@
 
 enum Command
 {
-    SampleCommand1, SampleCommand2
+    NONE,
+
+    USER_LOGIN_REQUEST, USER_LOGOUT_REQUEST,
+    LECTURE_LIST_REQUEST, LECTURE_CREATE_REQUEST, LECTURE_REMOVE_REQUEST,
+    LECTURE_ENTER_REQUEST, LECTURE_LEAVE_REQUEST, LECTURE_REGISTER_REQUEST, LECTURE_DEREGISTER_REQUEST,
+    ATTENDANCE_START_REQUEST, ATTNEDANCE_STOP_REQUEST, ATTENDANCE_RESULT_REQUEST, ATTENDANCE_CHECK_REQUEST,
+    CHAT_ENTER_REQUEST, CHAT_LEAVE_REQUEST, CHAT_USER_LIST_REQUEST, CHAT_SEND_MESSAGE_REQUEST,
+    
+    USER_LOGIN_RESPOND, USER_LOGOUT_RESPOND,
+    LECTURE_LIST_RESPOND, LECTURE_CREATE_RESPOND, LECTURE_REMOVE_RESPOND,
+    LECTURE_ENTER_RESPOND, LECTURE_LEAVE_RESPOND, LECTURE_REGISTER_RESPOND, LECTURE_DEREGISTER_RESPOND,
+    ATTENDANCE_START_RESPOND, ATTNEDANCE_STOP_RESPOND, ATTENDANCE_RESULT_RESPOND, ATTENDANCE_CHECK_RESPOND,
+    CHAT_ENTER_RESPOND, CHAT_LEAVE_RESPOND, CHAT_USER_LIST_RESPOND, CHAT_SEND_MESSAGE_RESPOND,
 };
+
+enum UserRole
+{
+    None, Admin, Student, Professor
+}
 
 enum ClientStatus
 {
@@ -31,8 +48,20 @@ enum ClientStatus
 typedef struct DataPack_t
 {
     enum Command command;
+    bool result;
+    char data1[128];
+    char data2[128];
+    char data3[128];
+    char data4[128];
     char message[508];
 } DataPack;
+
+typedef struct UserInfo_t
+{
+    enum UserRole role;
+    char userName[16];
+    uint uid;
+} UserInfo;
 
 // 서버
 bool connectServer();
@@ -47,6 +76,11 @@ void getUserInput();
 void receiveUserCommand();
 void updateCommandList();
 void updateUserInput();
+
+void userRequest(enum Command command);
+void lectureRequest(enum Command command);
+void attendanceRequest(enum Command command);
+void chatRequest(enum Command command);
 
 // 인터페이스
 void initiateInterface();
@@ -373,6 +407,41 @@ void updateUserInput()
     wprintw(UserInputWindow, "%s: %s", UserInputGuide, UserInputBuffer);
     wrefresh(UserInputWindow);
 }
+
+void userRequest(enum Command command)
+{
+    DataPack dataPack;
+    memset(&dataPack, 0, sizeof(DataPack));
+
+    dataPack.command = command;
+    strncpy(dataPack.data1, "", sizeof(dataPack.data1));
+    strncpy(dataPack.data2, "", sizeof(dataPack.data2));
+    sprintf(dataPack.data3, "%s", "");
+
+    strncpy(dataPack.data1, "", sizeof(dataPack.data1));
+
+    switch (command)
+    {
+        case ATTENDANCE_START_REQUEST:
+
+            break;
+        
+        case ATTNEDANCE_STOP_REQUEST:
+            break;
+        
+        case ATTENDANCE_RESULT_REQUEST:
+            break;
+        
+        case ATTENDANCE_CHECK_REQUEST:
+            break;
+
+        default:
+            break;
+    }
+}
+void lectureRequest(enum Command command);
+void attendanceRequest(enum Command command);
+void chatRequest(enum Command command);
 
 // ncurses라이브러리를 이용한 사용자 인터페이스 초기화
 void initiateInterface()
