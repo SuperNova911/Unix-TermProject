@@ -28,22 +28,35 @@ enum Command
     ATTENDANCE_START_REQUEST, ATTNEDANCE_STOP_REQUEST, ATTENDANCE_RESULT_REQUEST, ATTENDANCE_CHECK_REQUEST,
     CHAT_ENTER_REQUEST, CHAT_LEAVE_REQUEST, CHAT_USER_LIST_REQUEST, CHAT_SEND_MESSAGE_REQUEST,
     
-    USER_LOGIN_RESPOND, USER_LOGOUT_RESPOND,
-    LECTURE_LIST_RESPOND, LECTURE_CREATE_RESPOND, LECTURE_REMOVE_RESPOND,
-    LECTURE_ENTER_RESPOND, LECTURE_LEAVE_RESPOND, LECTURE_REGISTER_RESPOND, LECTURE_DEREGISTER_RESPOND,
-    ATTENDANCE_START_RESPOND, ATTNEDANCE_STOP_RESPOND, ATTENDANCE_RESULT_RESPOND, ATTENDANCE_CHECK_RESPOND,
-    CHAT_ENTER_RESPOND, CHAT_LEAVE_RESPOND, CHAT_USER_LIST_RESPOND, CHAT_SEND_MESSAGE_RESPOND,
+    USER_LOGIN_RESPONSE, USER_LOGOUT_RESPONSE,
+    LECTURE_LIST_RESPONSE, LECTURE_CREATE_RESPONSE, LECTURE_REMOVE_RESPONSE,
+    LECTURE_ENTER_RESPONSE, LECTURE_LEAVE_RESPONSE, LECTURE_REGISTER_RESPONSE, LECTURE_DEREGISTER_RESPONSE,
+    ATTENDANCE_START_RESPONSE, ATTNEDANCE_STOP_RESPONSE, ATTENDANCE_RESULT_RESPONSE, ATTENDANCE_CHECK_RESPONSE,
+    CHAT_ENTER_RESPONSE, CHAT_LEAVE_RESPONSE, CHAT_USER_LIST_RESPONSE, CHAT_SEND_MESSAGE_RESPONSE,
 };
 
 enum UserRole
 {
     None, Admin, Student, Professor
-}
+};
 
 enum ClientStatus
 {
     Login, LectureBrowser, Lobby, Chat
 } CurrentClientStatus;
+
+struct UserInfo_t
+{
+    enum UserRole role;
+    char userName[16];
+    char studentID[16];
+} UserInfo;
+
+struct LoginInfo_t
+{
+    char studentID[16];
+    char password[32];
+} LoginInfo;
 
 typedef struct DataPack_t
 {
@@ -53,15 +66,11 @@ typedef struct DataPack_t
     char data2[128];
     char data3[128];
     char data4[128];
-    char message[508];
+    char message[508 - sizeof(struct UserInfo_t)];
+    struct UserInfo_t userInfo;
 } DataPack;
 
-typedef struct UserInfo_t
-{
-    enum UserRole role;
-    char userName[16];
-    uint uid;
-} UserInfo;
+void initializeGlobalVariable();
 
 // 서버
 bool connectServer();
@@ -73,10 +82,14 @@ bool decomposeDataPack(DataPack *dataPack);
 void sendSampleDataPack();
 
 void getUserInput();
+void setInputGuide(char *inputGuide);
 void receiveUserCommand();
+void receiveArgument();
 void updateCommandList();
 void updateUserInput();
+void updateCommandAndInput();
 
+void buildDataPack(DataPack *targetDataPack, char *data1, char *data2, char *data3, char *data4, char *message);
 void userRequest(enum Command command);
 void lectureRequest(enum Command command);
 void attendanceRequest(enum Command command);
@@ -84,16 +97,20 @@ void chatRequest(enum Command command);
 
 // 인터페이스
 void initiateInterface();
+void drawDefaultLayout();
 void drawBorder(WINDOW *window, char *windowName);
+void printMessage(WINDOW *window, const char *format, ...);
 void onClose();
 
 int ServerSocket;
-
 int Fdmax;
 fd_set Master, Reader;
 
-char UserInputGuide[256] = { 0, };
-char UserInputBuffer[256] = { 0, };
+char UserInputGuide[256];
+char UserInputBuffer[256];
+
+enum Command CurrentRequest;
+char Arguments[4][128];
 
 WINDOW *MessageWindow, *MessageWindowBorder;
 WINDOW *CommandWindow, *CommandWindowBorder;
@@ -101,8 +118,11 @@ WINDOW *UserInputWindow, *UserInputWindowBorder;
 
 int main()
 {
+    initializeGlobalVariable();
+
     atexit(onClose);
     initiateInterface();
+    drawDefaultLayout();
 
     if (connectServer())
     {
@@ -116,24 +136,40 @@ int main()
 
     }
 
+    strncpy(LoginInfo.studentID, "201510743", sizeof(LoginInfo.studentID));
+    strncpy(LoginInfo.password, "suwhan77", sizeof(LoginInfo.password));
+    userRequest(USER_LOGIN_REQUEST);
     async();
 
     return 0;
+}
+
+// 전역 변수 초기화
+void initializeGlobalVariable()
+{
+    CurrentClientStatus = None;
+    CurrentRequest = NONE;
+
+    memset(&UserInfo, 0, sizeof(struct UserInfo_t));
+    memset(&LoginInfo, 0, sizeof(struct LoginInfo_t));
+    memset(UserInputGuide, 0, sizeof(UserInputGuide));
+    memset(UserInputBuffer, 0, sizeof(UserInputBuffer));
+    for (int index = 0; index < 4; index++)
+        memset(Arguments[index], 0, sizeof(char) * 128);
+
 }
 
 // TCP/IP 소켓 서버와 연결
 // [반환] true: 성공, false: 실패
 bool connectServer()
 {
-    wprintw(MessageWindow, "Try connect to server...\n");
-    wrefresh(MessageWindow);
+    printMessage(MessageWindow, "Try connect to server...\n");
 
     // TCP/IP 소켓
     ServerSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (ServerSocket == -1)
     {
-        wprintw(MessageWindow, "socket: %s\n", strerror(errno));
-        wrefresh(MessageWindow);
+        printMessage(MessageWindow, "socket: %s\n", strerror(errno));
         return false;
     }
 
@@ -147,13 +183,11 @@ bool connectServer()
     // 서버에 연결 요청
     if (connect(ServerSocket, (struct sockaddr *)&serverAddr, sizeof(struct sockaddr_in)) == -1)
     {
-        wprintw(MessageWindow, "connect: %s\n", strerror(errno));
-        wrefresh(MessageWindow);
+        printMessage(MessageWindow, "connect: %s\n", strerror(errno));
         return false;
     }
 
-    wprintw(MessageWindow, "Connected to server\n");
-    wrefresh(MessageWindow);
+    printMessage(MessageWindow, "Connected to server\n");
     return true;
 }
 
@@ -168,11 +202,12 @@ void async()
 
     while (true)
     {
+        updateCommandAndInput();
+
         Reader = Master;
         if (select(Fdmax + 1, &Reader, NULL, NULL, NULL) == -1)
         {
-            wprintw(MessageWindow, "select: %s\n", strerror(errno));
-            wrefresh(MessageWindow);
+            printMessage(MessageWindow, "select: %s\n", strerror(errno));
             return;
         }
 
@@ -214,16 +249,14 @@ void receiveData()
         case -1:
             close(ServerSocket);
             FD_CLR(ServerSocket, &Master);
-            wprintw(MessageWindow, "recv: %s\n", strerror(errno));
-            wrefresh(MessageWindow);
+            printMessage(MessageWindow, "recv: %s\n", strerror(errno));
             break;
         
         // 서버와 연결 종료
         case 0:
             close(ServerSocket);
             FD_CLR(ServerSocket, &Master);
-            wprintw(MessageWindow, "Disconnected from server\n");
-            wrefresh(MessageWindow);
+            printMessage(MessageWindow, "Disconnected from server\n");
             break;
 
         // 받은 데이터 유효성 검사
@@ -235,8 +268,7 @@ void receiveData()
             }
             else
             {
-                wprintw(MessageWindow, "Invalid data received, readBytes: '%d'\n", readBytes);
-                wrefresh(MessageWindow);
+                printMessage(MessageWindow, "Invalid data received, readBytes: '%d'\n", readBytes);
             }
             break;
     }
@@ -247,15 +279,14 @@ void receiveData()
 // [반환] true: , false: 
 bool decomposeDataPack(DataPack *dataPack)
 {
-    wprintw(MessageWindow, "command: '%d', message: '%s'\n", dataPack->command, dataPack->message);
-    wrefresh(MessageWindow);
+    printMessage(MessageWindow, "command: '%d', message: '%s'\n", dataPack->command, dataPack->message);
 
     switch(dataPack->command)
     {
-        case SampleCommand1:
+        case LECTURE_LIST_REQUEST:
             break;
 
-        case SampleCommand2:
+        case LECTURE_CREATE_REQUEST:
             break;
         
         default:
@@ -270,8 +301,7 @@ bool decomposeDataPack(DataPack *dataPack)
 // [반환] true: 전송 성공, false: 전송 실패
 bool sendDataPack(DataPack *dataPack)
 {
-    // wprintw(MessageWindow, "command: '%d', message: '%s'\n", dataPack->command, dataPack->message);
-    // wrefresh(MessageWindow);
+    // printMessage(MessageWindow, "command: '%d', message: '%s'\n", dataPack->command, dataPack->message);
 
     int sendBytes;
 
@@ -295,13 +325,12 @@ void sendSampleDataPack()
     DataPack sampleDataPack;
     memset(&sampleDataPack, 0, sizeof(DataPack));
 
-    sampleDataPack.command = SampleCommand2;
+    sampleDataPack.command = LECTURE_REGISTER_REQUEST;
     strncpy(sampleDataPack.message, "Definitely not Dopa", sizeof(sampleDataPack.message));
 
     sendDataPack(&sampleDataPack);
 
-    wprintw(MessageWindow, "Sample DataPack has been sent to the server\n");
-    wrefresh(MessageWindow);
+    printMessage(MessageWindow, "Sample DataPack has been sent to the server\n");
 }
 
 // 사용자의 키 입력을 읽어옴
@@ -339,6 +368,11 @@ void getUserInput()
     updateUserInput();
 }
 
+void setInputGuide(char *inputGuide)
+{
+    strncpy(UserInputGuide, inputGuide, sizeof(UserInputGuide));
+}
+
 // 사용자가 입력한 Command를 처리
 void receiveUserCommand()
 {
@@ -348,6 +382,23 @@ void receiveUserCommand()
     switch (CurrentClientStatus)
     {
         case Login:
+            break;
+
+//printMessage(CommandWindow, "1: 강의 목록 보기\n2: 강의 입장\n\n9: 로그아웃\n0: 프로그램 종료");
+        case LectureBrowser:
+            switch (atoi(UserInputBuffer))
+            {
+                case 1:
+                    break;
+                case 2:
+                    break;
+                case 9:
+                    break;
+                case 0:
+                    break;
+                default:
+                    break;
+            }
             break;
         
         case Lobby:
@@ -372,6 +423,26 @@ void receiveUserCommand()
     }
 }
 
+void receiveArgument()
+{
+    switch (CurrentRequest)
+    {
+        case USER_LOGIN_REQUEST:
+            if (strlen(Arguments[0]) == 0)
+            {
+                setInputGuide("학번을 입력하세요");
+
+            }
+            else if (strlen(Arguments[1] == 0))
+            {
+                setInputGuide("비밀번호를 입력하세요");
+
+            }
+
+
+    }
+}
+
 // CommandWindow의 명령어 목록을 ClientStatus에 따라 업데이트
 void updateCommandList()
 {
@@ -383,29 +454,55 @@ void updateCommandList()
             break;
 
         case LectureBrowser:
-            wprintw(CommandWindow, "1: 강의 목록 보기\n2: 강의 입장\n\n9: 로그아웃\n0: 프로그램 종료");
+            printMessage(CommandWindow, "1: 강의 목록 보기\n2: 강의 입장\n\n9: 로그아웃\n0: 프로그램 종료");
         
         case Lobby:
-            wprintw(CommandWindow, "1. 공지사항 확인\n2. 출석체크\n3. 강의 멤버 보기\n4. 강의실 나가기\n\n9: 로그아웃\n0: 프로그램 종료");
+            printMessage(CommandWindow, "1. 공지사항 확인\n2. 출석체크\n3. 강의 멤버 보기\n4. 강의실 나가기\n\n9: 로그아웃\n0: 프로그램 종료");
             break;
             
         case Chat:
-            wprintw(CommandWindow, "!quit: 채팅방 나가기\n!user: 채팅방 사용자 보기");
+            printMessage(CommandWindow, "!quit: 채팅방 나가기\n!user: 채팅방 사용자 보기");
             break;
 
         default:
             break;
     }
-
-    wrefresh(CommandWindow);
 }
 
 // UserInputWindow의 사용자 입력을 업데이트
 void updateUserInput()
 {
     wclear(UserInputWindow);
-    wprintw(UserInputWindow, "%s: %s", UserInputGuide, UserInputBuffer);
-    wrefresh(UserInputWindow);
+    printMessage(UserInputWindow, "%s: %s", UserInputGuide, UserInputBuffer);
+}
+
+void updateCommandAndInput()
+{
+    if (CurrentRequest == None)
+    {
+        setInputGuide("명령어를 입력하세요");
+        updateCommandList();
+        updateUserInput();
+    }
+    else
+    {
+        receiveArgument();
+
+    }
+}
+
+void buildDataPack(DataPack *targetDataPack, char *data1, char *data2, char *data3, char *data4, char *message)
+{
+    if (data1 != NULL)
+        strncpy(targetDataPack->data1, data1, sizeof(targetDataPack->data1));
+    if (data2 != NULL)
+        strncpy(targetDataPack->data2, data2, sizeof(targetDataPack->data2));
+    if (data3 != NULL)
+        strncpy(targetDataPack->data3, data3, sizeof(targetDataPack->data3));
+    if (data4 != NULL)
+        strncpy(targetDataPack->data4, data4, sizeof(targetDataPack->data4));
+    if (message != NULL)
+        strncpy(targetDataPack->message, message, sizeof(targetDataPack->message));
 }
 
 void userRequest(enum Command command)
@@ -414,16 +511,75 @@ void userRequest(enum Command command)
     memset(&dataPack, 0, sizeof(DataPack));
 
     dataPack.command = command;
-    strncpy(dataPack.data1, "", sizeof(dataPack.data1));
-    strncpy(dataPack.data2, "", sizeof(dataPack.data2));
-    sprintf(dataPack.data3, "%s", "");
+    memcpy(&dataPack.userInfo, &UserInfo, sizeof(struct UserInfo_t));
 
-    strncpy(dataPack.data1, "", sizeof(dataPack.data1));
+    switch (command)
+    {
+        case USER_LOGIN_REQUEST:
+            buildDataPack(&dataPack, LoginInfo.studentID, LoginInfo.password, NULL, NULL, NULL);
+            memset(&LoginInfo, 0, sizeof(struct LoginInfo_t));
+            break;
+        
+        case USER_LOGOUT_REQUEST:
+            memcpy(&dataPack.userInfo, &UserInfo, sizeof(struct UserInfo_t));
+            break;
+        
+        default:
+            return;
+    }
+
+    sendDataPack(&dataPack);
+}
+
+void lectureRequest(enum Command command)
+{
+    DataPack dataPack;
+    memset(&dataPack, 0, sizeof(DataPack));
+
+    dataPack.command = command;
+    memcpy(&dataPack.userInfo, &UserInfo, sizeof(struct UserInfo_t));
+
+    switch (command)
+    {
+        case LECTURE_LIST_REQUEST:
+            break;
+        
+        case LECTURE_CREATE_REQUEST:
+            break;
+        
+        case LECTURE_REMOVE_REQUEST:
+            break;
+        
+        case LECTURE_ENTER_REQUEST:
+            break;
+        
+        case LECTURE_LEAVE_REQUEST:
+            break;
+        
+        case LECTURE_REGISTER_REQUEST:
+            break;
+        
+        case LECTURE_DEREGISTER_REQUEST:
+            break;
+
+        default:
+            return;
+    }
+
+    sendDataPack(&dataPack);
+}
+
+void attendanceRequest(enum Command command)
+{
+    DataPack dataPack;
+    memset(&dataPack, 0, sizeof(DataPack));
+
+    dataPack.command = command;
+    memcpy(&dataPack.userInfo, &UserInfo, sizeof(struct UserInfo_t));
 
     switch (command)
     {
         case ATTENDANCE_START_REQUEST:
-
             break;
         
         case ATTNEDANCE_STOP_REQUEST:
@@ -436,12 +592,40 @@ void userRequest(enum Command command)
             break;
 
         default:
-            break;
+            return;
     }
+
+    sendDataPack(&dataPack);
 }
-void lectureRequest(enum Command command);
-void attendanceRequest(enum Command command);
-void chatRequest(enum Command command);
+
+void chatRequest(enum Command command)
+{
+    DataPack dataPack;
+    memset(&dataPack, 0, sizeof(DataPack));
+
+    dataPack.command = command;
+    memcpy(&dataPack.userInfo, &UserInfo, sizeof(struct UserInfo_t));
+
+    switch (command)
+    {
+        case CHAT_ENTER_REQUEST:
+            break;
+        
+        case CHAT_LEAVE_REQUEST:
+            break;
+        
+        case CHAT_USER_LIST_REQUEST:
+            break;
+        
+        case CHAT_SEND_MESSAGE_REQUEST:
+            break;
+
+        default:
+            return;
+    }
+
+    sendDataPack(&dataPack);
+}
 
 // ncurses라이브러리를 이용한 사용자 인터페이스 초기화
 void initiateInterface()
@@ -450,7 +634,11 @@ void initiateInterface()
     initscr();
     noecho();
     curs_set(FALSE);
+}
 
+// 기본 레이아웃으로 윈도우 그리기
+void drawDefaultLayout()
+{
     int parentX, parentY;
     getmaxyx(stdscr, parentY, parentX);
 
@@ -504,6 +692,17 @@ void drawBorder(WINDOW *window, char *windowName)
     // 윈도우 이름 출력
     mvwprintw(window, 0, 4, windowName); 
 
+    wrefresh(window);
+}
+
+// 매개변수로 전달한 윈도우에 문자열 출력
+// [매개변수] window: 문자열을 출력할 윈도우, format: 문자열 출력 포맷
+void printMessage(WINDOW *window, const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    vwprintw(window, format, args);
+    va_end(args);
     wrefresh(window);
 }
 
