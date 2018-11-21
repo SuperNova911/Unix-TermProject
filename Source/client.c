@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <fcntl.h>
+#include <locale.h>
 #include <ncurses.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -348,14 +349,14 @@ void updateCommandList()
             break;
 
         case LectureBrowser:
-            wprintw(CommandWindow, "1: ShowLectureList\n2: EnterLecture\n\n9: Logout\n0: Exit program");
+            wprintw(CommandWindow, "1: 강의 목록 보기\n2: 강의 입장\n\n9: 로그아웃\n0: 프로그램 종료");
         
         case Lobby:
-            wprintw(CommandWindow, "1. ShowNotice\n2. AttendanceCheck\n3. ShowUserList\n4. LeaveLecture\n\n9: Logout\n0: Exit program");
+            wprintw(CommandWindow, "1. 공지사항 확인\n2. 출석체크\n3. 강의 멤버 보기\n4. 강의실 나가기\n\n9: 로그아웃\n0: 프로그램 종료");
             break;
             
         case Chat:
-            wprintw(CommandWindow, "!quit: LeaveChat\n!user: ShowUserList");
+            wprintw(CommandWindow, "!quit: 채팅방 나가기\n!user: 채팅방 사용자 보기");
             break;
 
         default:
@@ -376,6 +377,7 @@ void updateUserInput()
 // ncurses라이브러리를 이용한 사용자 인터페이스 초기화
 void initiateInterface()
 {
+    setlocale(LC_CTYPE, "ko_KR.utf-8");
     initscr();
     noecho();
     curs_set(FALSE);

@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <fcntl.h>
+#include <locale.h>
 #include <ncurses.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -253,6 +254,7 @@ bool sendDataPack(int receiver, DataPack *dataPack)
 // ncurses라이브러리를 이용한 사용자 인터페이스 초기화
 void initiateInterface()
 {
+    setlocale(LC_CTYPE, "ko_KR.utf-8");
     initscr();
     noecho();
     curs_set(FALSE);
