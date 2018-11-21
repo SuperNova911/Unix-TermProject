@@ -21,23 +21,32 @@
 
 enum Command
 {
-    LOGIN_REQUEST, LOGOUT_REQUEST,
+    NONE,
+
+    USER_LOGIN_REQUEST, USER_LOGOUT_REQUEST,
     LECTURE_LIST_REQUEST, LECTURE_CREATE_REQUEST, LECTURE_REMOVE_REQUEST,
     LECTURE_ENTER_REQUEST, LECTURE_LEAVE_REQUEST, LECTURE_REGISTER_REQUEST, LECTURE_DEREGISTER_REQUEST,
     ATTENDANCE_START_REQUEST, ATTNEDANCE_STOP_REQUEST, ATTENDANCE_RESULT_REQUEST, ATTENDANCE_CHECK_REQUEST,
     CHAT_ENTER_REQUEST, CHAT_LEAVE_REQUEST, CHAT_USER_LIST_REQUEST, CHAT_SEND_MESSAGE_REQUEST,
     
-    LOGIN_RESPOND, LOGOUT_RESPOND,
-    LECTURE_LIST_RESPOND, LECTURE_CREATE_RESPOND, LECTURE_REMOVE_RESPOND,
-    LECTURE_ENTER_RESPOND, LECTURE_LEAVE_RESPOND, LECTURE_REGISTER_RESPOND, LECTURE_DEREGISTER_RESPOND,
-    ATTENDANCE_START_RESPOND, ATTNEDANCE_STOP_RESPOND, ATTENDANCE_RESULT_RESPOND, ATTENDANCE_CHECK_RESPOND,
-    CHAT_ENTER_RESPOND, CHAT_LEAVE_RESPOND, CHAT_USER_LIST_RESPOND, CHAT_SEND_MESSAGE_RESPOND,
+    LOGIN_RESPONSE, LOGOUT_RESPONSE,
+    LECTURE_LIST_RESPONSE, LECTURE_CREATE_RESPONSE, LECTURE_REMOVE_RESPONSE,
+    LECTURE_ENTER_RESPONSE, LECTURE_LEAVE_RESPONSE, LECTURE_REGISTER_RESPONSE, LECTURE_DEREGISTER_RESPONSE,
+    ATTENDANCE_START_RESPONSE, ATTNEDANCE_STOP_RESPONSE, ATTENDANCE_RESULT_RESPONSE, ATTENDANCE_CHECK_RESPONSE,
+    CHAT_ENTER_RESPONSE, CHAT_LEAVE_RESPONSE, CHAT_USER_LIST_RESPONSE, CHAT_SEND_MESSAGE_RESPONSE,
 };
 
 enum UserRole
 {
     None, Admin, Student, Professor
-}
+};
+
+typedef struct UserInfo_t
+{
+    enum UserRole role;
+    char userName[16];
+    char studentID[16];
+} UserInfo;
 
 typedef struct DataPack_t
 {
@@ -47,15 +56,9 @@ typedef struct DataPack_t
     char data2[128];
     char data3[128];
     char data4[128];
-    char message[507];
+    char message[508 - sizeof(UserInfo)];
+    UserInfo userInfo;
 } DataPack;
-
-typedef struct UserInfo_t
-{
-    enum UserRole role;
-    char userName[16];
-    uint uid;
-} UserInfo;
 
 // 서버
 bool initiateServer();
@@ -69,7 +72,9 @@ bool decomposeDataPack(int sender, DataPack *dataPack);
 
 // 인터페이스
 void initiateInterface();
+void drawDefaultLayout();
 void drawBorder(WINDOW *window, char *windowName);
+void printMessage(WINDOW *window, const char *format, ...);
 void onClose();
 
 int ServerSocket;
@@ -86,6 +91,7 @@ int main()
 {
     atexit(onClose);
     initiateInterface();
+    drawDefaultLayout();
 
     initiateServer();
     async();
@@ -97,15 +103,13 @@ int main()
 // [반환] true: 성공, false: 실패
 bool initiateServer()
 {
-    wprintw(MessageWindow, "Initiate server\n");
-    wrefresh(MessageWindow);
+    printMessage(MessageWindow, "Initiate server\n");
 
     // TCP/IP 소켓
     ServerSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (ServerSocket == -1)
     {
-        wprintw(MessageWindow, "socket: %s\n", strerror(errno));
-        wrefresh(MessageWindow);
+        printMessage(MessageWindow, "socket: %s\n", strerror(errno));
         return false;
     }
 
@@ -121,15 +125,13 @@ bool initiateServer()
 
     if (bind(ServerSocket, (struct sockaddr *)&serverAddr, sizeof(struct sockaddr_in)) == -1)
     {
-        wprintw(MessageWindow, "bind: %s\n", strerror(errno));
-        wrefresh(MessageWindow);
+        printMessage(MessageWindow, "bind: %s\n", strerror(errno));
         return false;
     }
 
     if (listen(ServerSocket, MAX_CLIENT) == -1)
     {
-        wprintw(MessageWindow, "listen: %s\n", strerror(errno));
-        wrefresh(MessageWindow);
+        printMessage(MessageWindow, "listen: %s\n", strerror(errno));
         return false;
     }
 
@@ -152,8 +154,7 @@ void async()
         Reader = Master;
         if (select(Fdmax + 1, &Reader, NULL, NULL, NULL) == -1)
         {
-            wprintw(MessageWindow, "select: %s\n", strerror(errno));
-            wrefresh(MessageWindow);
+            printMessage(MessageWindow, "select: %s\n", strerror(errno));
             return;
         }
 
@@ -188,8 +189,7 @@ void acceptClient()
     newSocket = accept(ServerSocket, (struct sockaddr *)&clientAddr, &addrlen);
     if (newSocket == -1)
     {
-        wprintw(MessageWindow, "accept: %s\n", strerror(errno));
-        wrefresh(MessageWindow);
+        printMessage(MessageWindow, "accept: %s\n", strerror(errno));
     }
     else
     {
@@ -198,8 +198,7 @@ void acceptClient()
         {
             Fdmax = newSocket;
         }
-        wprintw(MessageWindow, "Accept new client, socket: '%d'\n", newSocket);
-        wrefresh(MessageWindow);
+        printMessage(MessageWindow, "Accept new client, socket: '%d'\n", newSocket);
     }
 }
 
@@ -221,16 +220,14 @@ void receiveData(int socket)
         case -1:
             close(socket);
             FD_CLR(socket, &Master);
-            wprintw(MessageWindow, "recv: %s, socket: %d\n", strerror(errno), socket);
-            wrefresh(MessageWindow);
+            printMessage(MessageWindow, "recv: %s, socket: %d\n", strerror(errno), socket);
             break;
 
         // 클라이언트와 연결 종료
         case 0:
             close(socket);
             FD_CLR(socket, &Master);
-            wprintw(MessageWindow, "Client disconnected, socket: '%d'\n", socket);
-            wrefresh(MessageWindow);
+            printMessage(MessageWindow, "Client disconnected, socket: '%d'\n", socket);
             break;
 
         // 받은 데이터 유효성 검사
@@ -242,8 +239,7 @@ void receiveData(int socket)
             }
             else
             {
-                wprintw(MessageWindow, "Invalid data received, socket: '%d', readBytes: '%d'\n", socket, readBytes);
-                wrefresh(MessageWindow);
+                printMessage(MessageWindow, "Invalid data received, socket: '%d', readBytes: '%d'\n", socket, readBytes);
             }
             break;
     }
@@ -254,17 +250,13 @@ void receiveData(int socket)
 // [반환] true: , false: 
 bool decomposeDataPack(int sender, DataPack *dataPack)
 {
-    wprintw(MessageWindow, "sender: '%d', command: '%d', message: '%s'\n", sender, dataPack->command, dataPack->message);
-    wrefresh(MessageWindow);
+    printMessage(MessageWindow, "sender: '%d', command: '%d', result: '%d'\ndata1: '%s', data2: '%s'\ndata3: '%s', data4: '%s', message: '%s'\nrole: '%d', userName: '%s', studentID: '%s'", sender, dataPack->command, dataPack->result, dataPack->data1, dataPack->data2, dataPack->data3, dataPack->data4, dataPack->message, dataPack->userInfo.role, dataPack->userInfo.userName, dataPack->userInfo.studentID);
 
     switch(dataPack->command)
     {
-        case SampleCommand1:
+        case LECTURE_ENTER_REQUEST:
             break;
 
-        case SampleCommand2:
-            break;
-        
         default:
             break;
     }
@@ -285,7 +277,11 @@ void initiateInterface()
     initscr();
     noecho();
     curs_set(FALSE);
+}
 
+// 기본 레이아웃으로 윈도우 그리기
+void drawDefaultLayout()
+{
     int parentX, parentY;
     getmaxyx(stdscr, parentY, parentX);
 
@@ -307,7 +303,7 @@ void initiateInterface()
     drawBorder(MessageWindowBorder, "MESSAGE");
     drawBorder(CommandWindowBorder, "COMMAND");
     drawBorder(UserInputWindowBorder, "USER INPUT");
-
+    
     wrefresh(MessageWindow);
     wrefresh(CommandWindow);
     wrefresh(UserInputWindow);
@@ -339,6 +335,17 @@ void drawBorder(WINDOW *window, char *windowName)
     // 윈도우 이름 출력
     mvwprintw(window, 0, 4, windowName); 
 
+    wrefresh(window);
+}
+
+// 매개변수로 전달한 윈도우에 문자열 출력
+// [매개변수] window: 문자열을 출력할 윈도우, format: 문자열 출력 포맷
+void printMessage(WINDOW *window, const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    vwprintw(window, format, args);
+    va_end(args);
     wrefresh(window);
 }
 
