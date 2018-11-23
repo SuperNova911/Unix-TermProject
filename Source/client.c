@@ -1,7 +1,8 @@
+#include "interface.h"
+#include "dataPack.h"
+
 #include <errno.h>
 #include <fcntl.h>
-#include <locale.h>
-#include <ncurses.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,57 +19,16 @@
 #define SERVER_PORT 10743
 #define SERVER_ADDRESS "192.168.98.128"
 
-enum Command
-{
-    NONE,
-
-    USER_LOGIN_REQUEST, USER_LOGOUT_REQUEST,
-    LECTURE_LIST_REQUEST, LECTURE_CREATE_REQUEST, LECTURE_REMOVE_REQUEST,
-    LECTURE_ENTER_REQUEST, LECTURE_LEAVE_REQUEST, LECTURE_REGISTER_REQUEST, LECTURE_DEREGISTER_REQUEST,
-    ATTENDANCE_START_REQUEST, ATTNEDANCE_STOP_REQUEST, ATTENDANCE_RESULT_REQUEST, ATTENDANCE_CHECK_REQUEST,
-    CHAT_ENTER_REQUEST, CHAT_LEAVE_REQUEST, CHAT_USER_LIST_REQUEST, CHAT_SEND_MESSAGE_REQUEST,
-    
-    USER_LOGIN_RESPONSE, USER_LOGOUT_RESPONSE,
-    LECTURE_LIST_RESPONSE, LECTURE_CREATE_RESPONSE, LECTURE_REMOVE_RESPONSE,
-    LECTURE_ENTER_RESPONSE, LECTURE_LEAVE_RESPONSE, LECTURE_REGISTER_RESPONSE, LECTURE_DEREGISTER_RESPONSE,
-    ATTENDANCE_START_RESPONSE, ATTNEDANCE_STOP_RESPONSE, ATTENDANCE_RESULT_RESPONSE, ATTENDANCE_CHECK_RESPONSE,
-    CHAT_ENTER_RESPONSE, CHAT_LEAVE_RESPONSE, CHAT_USER_LIST_RESPONSE, CHAT_SEND_MESSAGE_RESPONSE,
-};
-
-enum UserRole
-{
-    None, Admin, Student, Professor
-};
-
 enum ClientStatus
 {
     Login, LectureBrowser, Lobby, Chat
 } CurrentClientStatus;
-
-struct UserInfo_t
-{
-    enum UserRole role;
-    char userName[16];
-    char studentID[16];
-} UserInfo;
 
 struct LoginInfo_t
 {
     char studentID[16];
     char password[32];
 } LoginInfo;
-
-typedef struct DataPack_t
-{
-    enum Command command;
-    bool result;
-    char data1[128];
-    char data2[128];
-    char data3[128];
-    char data4[128];
-    char message[508 - sizeof(struct UserInfo_t)];
-    struct UserInfo_t userInfo;
-} DataPack;
 
 void initializeGlobalVariable();
 
@@ -89,18 +49,17 @@ void updateCommandList();
 void updateUserInput();
 void updateCommandAndInput();
 
-void buildDataPack(DataPack *targetDataPack, char *data1, char *data2, char *data3, char *data4, char *message);
 void userRequest(enum Command command);
 void lectureRequest(enum Command command);
 void attendanceRequest(enum Command command);
 void chatRequest(enum Command command);
 
 // 인터페이스
-void initiateInterface();
-void drawDefaultLayout();
-void drawBorder(WINDOW *window, char *windowName);
-void printMessage(WINDOW *window, const char *format, ...);
-void onClose();
+extern WINDOW *MessageWindow, *MessageWindowBorder;
+extern WINDOW *CommandWindow, *CommandWindowBorder;
+extern WINDOW *UserInputWindow, *UserInputWindowBorder;
+
+UserInfo CurrentUserInfo;
 
 int ServerSocket;
 int Fdmax;
@@ -111,10 +70,6 @@ char UserInputBuffer[256];
 
 enum Command CurrentRequest;
 char Arguments[4][128];
-
-WINDOW *MessageWindow, *MessageWindowBorder;
-WINDOW *CommandWindow, *CommandWindowBorder;
-WINDOW *UserInputWindow, *UserInputWindowBorder;
 
 int main()
 {
@@ -135,10 +90,7 @@ int main()
     {
 
     }
-
-    strncpy(LoginInfo.studentID, "201510743", sizeof(LoginInfo.studentID));
-    strncpy(LoginInfo.password, "suwhan77", sizeof(LoginInfo.password));
-    userRequest(USER_LOGIN_REQUEST);
+    
     async();
 
     return 0;
@@ -150,7 +102,7 @@ void initializeGlobalVariable()
     CurrentClientStatus = None;
     CurrentRequest = NONE;
 
-    memset(&UserInfo, 0, sizeof(struct UserInfo_t));
+    memset(&CurrentUserInfo, 0, sizeof(UserInfo));
     memset(&LoginInfo, 0, sizeof(struct LoginInfo_t));
     memset(UserInputGuide, 0, sizeof(UserInputGuide));
     memset(UserInputBuffer, 0, sizeof(UserInputBuffer));
@@ -207,8 +159,13 @@ void async()
         Reader = Master;
         if (select(Fdmax + 1, &Reader, NULL, NULL, NULL) == -1)
         {
-            printMessage(MessageWindow, "select: %s\n", strerror(errno));
-            return;
+            if (errno != EINTR)
+            {
+                printMessage(MessageWindow, "select: %s\n", strerror(errno));
+                sleep(3);
+                return;
+            }
+            continue;
         }
 
         for (int fd = 0; fd <= Fdmax; fd++)
@@ -433,7 +390,7 @@ void receiveArgument()
                 setInputGuide("학번을 입력하세요");
 
             }
-            else if (strlen(Arguments[1] == 0))
+            else if (strlen(Arguments[1]) == 0)
             {
                 setInputGuide("비밀번호를 입력하세요");
 
@@ -491,27 +448,13 @@ void updateCommandAndInput()
     }
 }
 
-void buildDataPack(DataPack *targetDataPack, char *data1, char *data2, char *data3, char *data4, char *message)
-{
-    if (data1 != NULL)
-        strncpy(targetDataPack->data1, data1, sizeof(targetDataPack->data1));
-    if (data2 != NULL)
-        strncpy(targetDataPack->data2, data2, sizeof(targetDataPack->data2));
-    if (data3 != NULL)
-        strncpy(targetDataPack->data3, data3, sizeof(targetDataPack->data3));
-    if (data4 != NULL)
-        strncpy(targetDataPack->data4, data4, sizeof(targetDataPack->data4));
-    if (message != NULL)
-        strncpy(targetDataPack->message, message, sizeof(targetDataPack->message));
-}
-
 void userRequest(enum Command command)
 {
     DataPack dataPack;
     memset(&dataPack, 0, sizeof(DataPack));
 
     dataPack.command = command;
-    memcpy(&dataPack.userInfo, &UserInfo, sizeof(struct UserInfo_t));
+    memcpy(&dataPack.userInfo, &CurrentUserInfo, sizeof(UserInfo));
 
     switch (command)
     {
@@ -521,7 +464,7 @@ void userRequest(enum Command command)
             break;
         
         case USER_LOGOUT_REQUEST:
-            memcpy(&dataPack.userInfo, &UserInfo, sizeof(struct UserInfo_t));
+            memcpy(&dataPack.userInfo, &CurrentUserInfo, sizeof(UserInfo));
             break;
         
         default:
@@ -537,7 +480,7 @@ void lectureRequest(enum Command command)
     memset(&dataPack, 0, sizeof(DataPack));
 
     dataPack.command = command;
-    memcpy(&dataPack.userInfo, &UserInfo, sizeof(struct UserInfo_t));
+    memcpy(&dataPack.userInfo, &CurrentUserInfo, sizeof(UserInfo));
 
     switch (command)
     {
@@ -575,7 +518,7 @@ void attendanceRequest(enum Command command)
     memset(&dataPack, 0, sizeof(DataPack));
 
     dataPack.command = command;
-    memcpy(&dataPack.userInfo, &UserInfo, sizeof(struct UserInfo_t));
+    memcpy(&dataPack.userInfo, &CurrentUserInfo, sizeof(UserInfo));
 
     switch (command)
     {
@@ -604,7 +547,7 @@ void chatRequest(enum Command command)
     memset(&dataPack, 0, sizeof(DataPack));
 
     dataPack.command = command;
-    memcpy(&dataPack.userInfo, &UserInfo, sizeof(struct UserInfo_t));
+    memcpy(&dataPack.userInfo, &CurrentUserInfo, sizeof(UserInfo));
 
     switch (command)
     {
@@ -627,94 +570,3 @@ void chatRequest(enum Command command)
     sendDataPack(&dataPack);
 }
 
-// ncurses라이브러리를 이용한 사용자 인터페이스 초기화
-void initiateInterface()
-{
-    setlocale(LC_CTYPE, "ko_KR.utf-8");
-    initscr();
-    noecho();
-    curs_set(FALSE);
-}
-
-// 기본 레이아웃으로 윈도우 그리기
-void drawDefaultLayout()
-{
-    int parentX, parentY;
-    getmaxyx(stdscr, parentY, parentX);
-
-    int commandWindowBorderWidth = 22;
-    int userInputWindowBorderHeight = 4;
-
-    MessageWindow = newwin(parentY - userInputWindowBorderHeight - 2, parentX - commandWindowBorderWidth - 2, 1, 1);
-    MessageWindowBorder = newwin(parentY - userInputWindowBorderHeight, parentX - commandWindowBorderWidth, 0, 0);
-
-    CommandWindow = newwin(parentY - userInputWindowBorderHeight - 2, commandWindowBorderWidth - 2, 1, parentX - commandWindowBorderWidth + 1);
-    CommandWindowBorder = newwin(parentY - userInputWindowBorderHeight, commandWindowBorderWidth, 0, parentX - commandWindowBorderWidth);
-
-    UserInputWindow = newwin(userInputWindowBorderHeight - 2, parentX - 2, parentY - userInputWindowBorderHeight + 1, 1);
-    UserInputWindowBorder = newwin(userInputWindowBorderHeight, parentX, parentY - userInputWindowBorderHeight, 0);
-
-    scrollok(MessageWindow, TRUE);
-    scrollok(CommandWindow, TRUE);
-
-    drawBorder(MessageWindowBorder, "MESSAGE");
-    drawBorder(CommandWindowBorder, "COMMAND");
-    drawBorder(UserInputWindowBorder, "USER INPUT");
-
-    wrefresh(MessageWindow);
-    wrefresh(CommandWindow);
-    wrefresh(UserInputWindow);
-}
-
-// 윈도우 테두리 그리기
-// [매개변수] window: 테두리를 그릴 윈도우, windowName: 상단에 보여줄 윈도우 이름
-void drawBorder(WINDOW *window, char *windowName)
-{
-    int x, y;
-    getmaxyx(window, y, x);
-
-    // 테두리 그리기
-    mvwprintw(window, 0, 0, "+"); 
-    mvwprintw(window, y - 1, 0, "+"); 
-    mvwprintw(window, 0, x - 1, "+"); 
-    mvwprintw(window, y - 1, x - 1, "+"); 
-    for (int i = 1; i < (y - 1); i++)
-    {
-        mvwprintw(window, i, 0, "|"); 
-        mvwprintw(window, i, x - 1, "|"); 
-    }
-    for (int i = 1; i < (x - 1); i++)
-    {
-        mvwprintw(window, 0, i, "-"); 
-        mvwprintw(window, y - 1, i, "-"); 
-    }
-
-    // 윈도우 이름 출력
-    mvwprintw(window, 0, 4, windowName); 
-
-    wrefresh(window);
-}
-
-// 매개변수로 전달한 윈도우에 문자열 출력
-// [매개변수] window: 문자열을 출력할 윈도우, format: 문자열 출력 포맷
-void printMessage(WINDOW *window, const char *format, ...)
-{
-    va_list args;
-    va_start(args, format);
-    vwprintw(window, format, args);
-    va_end(args);
-    wrefresh(window);
-}
-
-// 프로그램 종료시 수행
-void onClose()
-{
-    // ncurses윈도우 종료
-    delwin(MessageWindow);
-    delwin(MessageWindowBorder);
-    delwin(CommandWindow);
-    delwin(CommandWindowBorder);
-    delwin(UserInputWindow);
-    delwin(UserInputWindowBorder);
-    endwin();
-}
