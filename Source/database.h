@@ -2,8 +2,8 @@
 #include <stdbool.h>
 #include <sqlite3.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
 
 #define DB_PATH "데이터베이스 경로"
 #define LECTURE_MAX_MEMBER 60
@@ -17,11 +17,11 @@ typedef enum
 // 사용자 정보 구조체
 typedef struct User_t
 {
-    int studentID[16];
+    char studentID[16];
     char hashedPassword[64];
     char userName[16];
-    Role role; 
-    time_t registerDate;
+    int role; 				    //변수 tpye이 Role인데 test하기 위해 잠시 int형으로 바꿈
+    int registerDate;			//변수 tpye이 Role인데 test하기 위해 잠시 time_t형으로 바꿈
 } User;
 
 // 강의 정보 구조체
@@ -54,8 +54,8 @@ typedef struct ChatLog_t
 } ChatLog;
 
 bool createNewDatabase();       // 새로운 데이터베이스 생성
-//bool connectToDatabase();                          // 데이터베이스에 연결
-bool closeDatabase():           // 데이터베이스 닫기
+//bool connectToDatabase();       // 데이터베이스에 연결
+void closeDatabase():           // 데이터베이스 닫기
 
 User *loadUser(User user[], int amount, int lectureID);     // DB에서 lectureID가 일치하는 사용자 구조체 배열 반환
 User loadUserByID(char *studentID);                         // DB에서 studentID가 일치하는 사용자 구조체 반환
@@ -78,4 +78,14 @@ bool clearAttendanceCheckLog();                                 // AttendanceChe
 
 ChatLog *loadChatLog(ChatLog chatLog[], int amount, int lectureID);       // DB에서 lectureID가 일치하는 채팅 기록 구조체 배열 반환
 bool saveChatLog(ChatLog *chatLog);                                       // DB에 채팅 기록 저장
-bool clearChatLog();                                                      // ChatLog 테이블 초기화
+bool clearChatLog();
+
+//---추가---
+bool isItUser;                          //유저들의 데이터베이스인지 확인하는 변수
+bool isItLecture;                       //강의들의 데이터베이스인지 확인하는 변수.
+bool isItAttendanceCheckLog;            //출석체크 기록 데이터베이스인지 확인하는 변수.
+bool isItChatLog;                       //채팅 기록 데이터베이스인지 확인하는 변수.
+
+char *err_msg = 0;                      //에러메시지 변수.
+
+
