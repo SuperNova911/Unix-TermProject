@@ -55,7 +55,7 @@ typedef struct ChatLog_t
 
 bool createNewDatabase();       // 새로운 데이터베이스 생성
 //bool connectToDatabase();       // 데이터베이스에 연결
-void closeDatabase():           // 데이터베이스 닫기
+bool closeDatabase():           // 데이터베이스 닫기
 
 User *loadUser(User user[], int amount, int lectureID);     // DB에서 lectureID가 일치하는 사용자 구조체 배열 반환
 User loadUserByID(char *studentID);                         // DB에서 studentID가 일치하는 사용자 구조체 반환
