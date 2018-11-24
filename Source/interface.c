@@ -1,5 +1,8 @@
 #include "interface.h"
 
+WINDOW *StatusWindow;
+WINDOW *NoticeWindow, *NoticeWindowBorder;
+WINDOW *EventWindow, *EventWindowBorder;
 WINDOW *MessageWindow, *MessageWindowBorder;
 WINDOW *CommandWindow, *CommandWindowBorder;
 WINDOW *UserInputWindow, *UserInputWindowBorder;
@@ -15,7 +18,7 @@ void initiateInterface()
     signal(SIGWINCH, signalResize);
 }
 
-// 기본 레이아웃으로 윈도우 그리기
+// 기본 레이아웃 그리기
 void drawDefaultLayout()
 {
     int parentX, parentY;
@@ -40,6 +43,46 @@ void drawDefaultLayout()
     drawBorder(CommandWindowBorder, "COMMAND");
     drawBorder(UserInputWindowBorder, "USER INPUT");
 
+    wrefresh(MessageWindow);
+    wrefresh(CommandWindow);
+    wrefresh(UserInputWindow);
+}
+
+// 강의실 로비 레이아웃 그리기
+void drawLectureLobbyLayout()
+{
+    int parentX, parentY;
+    getmaxyx(stdscr, parentY, parentX);
+
+    StatusWindow = newwin(STATUS_HEIGHT, parentX, 0, 0);
+
+    NoticeWindow = newwin(NOTICE_HEIGHT - 2, parentX - EVENT_WIDTH - 2, STATUS_HEIGHT + 1, 1);
+    NoticeWindowBorder = newwin(NOTICE_HEIGHT, parentX - EVENT_WIDTH, STATUS_HEIGHT, 0);
+
+    EventWindow = newwin(EVENT_HEIGHT - 2, EVENT_WIDTH - 2, STATUS_HEIGHT + 1, parentX - EVENT_WIDTH + 1);
+    EventWindowBorder = newwin(EVENT_HEIGHT, EVENT_WIDTH, STATUS_HEIGHT, parentX - EVENT_WIDTH);
+
+    MessageWindow = newwin(parentY - STATUS_HEIGHT - NOTICE_HEIGHT - INPUT_HEIGHT - 2, parentX - COMMAND_WIDTH - 2, STATUS_HEIGHT + NOTICE_HEIGHT + 1, 1);
+    MessageWindowBorder = newwin(parentY - STATUS_HEIGHT - NOTICE_HEIGHT - INPUT_HEIGHT, parentX - COMMAND_WIDTH, STATUS_HEIGHT + NOTICE_HEIGHT, 0);
+
+    CommandWindow = newwin(parentY - STATUS_HEIGHT - EVENT_HEIGHT - INPUT_HEIGHT - 2, COMMAND_WIDTH - 2, STATUS_HEIGHT + EVENT_HEIGHT + 1, parentX - COMMAND_WIDTH + 1);
+    CommandWindowBorder = newwin(parentY - STATUS_HEIGHT - EVENT_HEIGHT - INPUT_HEIGHT, COMMAND_WIDTH, STATUS_HEIGHT + EVENT_HEIGHT, parentX - COMMAND_WIDTH);
+
+    UserInputWindow = newwin(INPUT_HEIGHT - 2, parentX - 2, parentY - INPUT_HEIGHT + 1, 1);
+    UserInputWindowBorder = newwin(INPUT_HEIGHT, parentX, parentY - INPUT_HEIGHT, 0);
+
+    scrollok(NoticeWindow, TRUE);
+    scrollok(MessageWindow, TRUE);
+
+    drawBorder(NoticeWindowBorder, "공지 사항");
+    drawBorder(EventWindowBorder, "진행중인 이벤트");
+    drawBorder(MessageWindowBorder, "메시지");
+    drawBorder(CommandWindowBorder, "명령어");
+    drawBorder(UserInputWindowBorder, "사용자 입력");
+
+    wrefresh(StatusWindow);
+    wrefresh(NoticeWindow);
+    wrefresh(EventWindow);
     wrefresh(MessageWindow);
     wrefresh(CommandWindow);
     wrefresh(UserInputWindow);
@@ -102,5 +145,5 @@ void signalResize()
 {
     endwin();
     refresh();
-    drawDefaultLayout();
+    drawLectureLobbyLayout();
 }
