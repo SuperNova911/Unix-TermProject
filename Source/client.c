@@ -1,5 +1,6 @@
-#include "interface.h"
+// #include "database.h"
 #include "dataPack.h"
+#include "interface.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -21,7 +22,7 @@
 
 enum ClientStatus
 {
-    Login, LectureBrowser, Lobby, Chat
+    Default, Login, LectureBrowser, Lobby, Chat
 } CurrentClientStatus;
 
 struct LoginInfo_t
@@ -46,7 +47,6 @@ void setInputGuide(char *inputGuide);
 void receiveUserCommand();
 void receiveArgument();
 void updateCommandList();
-void updateUserInput();
 void updateCommandAndInput();
 
 void userRequest(enum Command command);
@@ -54,10 +54,15 @@ void lectureRequest(enum Command command);
 void attendanceRequest(enum Command command);
 void chatRequest(enum Command command);
 
+void drawLayoutByStatus();
+
 // 인터페이스
+extern WINDOW *StatusWindow;
+extern WINDOW *NoticeWindow, *NoticeWindowBorder;
+extern WINDOW *EventWindow, *EventWindowBorder;
 extern WINDOW *MessageWindow, *MessageWindowBorder;
 extern WINDOW *CommandWindow, *CommandWindowBorder;
-extern WINDOW *UserInputWindow, *UserInputWindowBorder;
+extern WINDOW *InputWindow, *InputWindowBorder;
 
 UserInfo CurrentUserInfo;
 
@@ -77,20 +82,48 @@ int main()
 
     atexit(onClose);
     initiateInterface();
-    drawDefaultLayout();
 
-    if (connectServer())
-    {
-        CurrentClientStatus = Lobby;
-        strncpy(UserInputGuide, "Your Command", sizeof(UserInputGuide));
-        updateCommandList();
-        updateUserInput();
-    }
-    else
-    {
+    CurrentClientStatus = Default;
+    drawLayoutByStatus();
 
+    printMessage(MessageWindow, "Try connect to server...\n");
+    while (true)
+    {
+        if (connectServer())
+            break;
+
+        printMessage(MessageWindow, "Cannot connect to server\n");
+        printMessage(InputWindow, "Press any key to reconnect to server");
+        getchar();
+        printMessage(MessageWindow, "Try connect to server...\n");
+        sleep(3);
     }
-    
+
+    sleep(3);
+    CurrentClientStatus = Login;
+    drawLayoutByStatus();
+
+
+    while (true)
+    {
+        if (/*loginUser(LoginInfo.studentID, LoginInfo.password) || */true)
+            break;
+
+        printMessage(MessageWindow, "Login failed, please check your StudentID or Password\n");
+        getchar();
+        sleep(3);
+    }
+
+    sleep(3);
+    CurrentClientStatus = LectureBrowser;
+    drawLayoutByStatus();
+
+    // lecture brawser
+
+    sleep(3);
+    CurrentClientStatus = Lobby;
+    drawLayoutByStatus();
+
     async();
 
     return 0;
@@ -99,7 +132,7 @@ int main()
 // 전역 변수 초기화
 void initializeGlobalVariable()
 {
-    CurrentClientStatus = None;
+    CurrentClientStatus = Default;
     CurrentRequest = NONE;
 
     memset(&CurrentUserInfo, 0, sizeof(UserInfo));
@@ -115,8 +148,6 @@ void initializeGlobalVariable()
 // [반환] true: 성공, false: 실패
 bool connectServer()
 {
-    printMessage(MessageWindow, "Try connect to server...\n");
-
     // TCP/IP 소켓
     ServerSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (ServerSocket == -1)
@@ -322,7 +353,7 @@ void getUserInput()
             }
     }
 
-    updateUserInput();
+    updateInput(UserInputGuide, UserInputBuffer);
 }
 
 void setInputGuide(char *inputGuide)
@@ -403,34 +434,25 @@ void receiveArgument()
 // CommandWindow의 명령어 목록을 ClientStatus에 따라 업데이트
 void updateCommandList()
 {
-    wclear(CommandWindow);
-
     switch (CurrentClientStatus)
     {
         case Login:
             break;
 
         case LectureBrowser:
-            printMessage(CommandWindow, "1: 강의 목록 보기\n2: 강의 입장\n\n9: 로그아웃\n0: 프로그램 종료");
+            updateCommand("1: 강의 목록 보기\n2: 강의 입장\n\n\n\n\n\n\n9: 로그아웃\n0: 프로그램 종료");
         
         case Lobby:
-            printMessage(CommandWindow, "1. 공지사항 확인\n2. 출석체크\n3. 강의 멤버 보기\n4. 강의실 나가기\n\n9: 로그아웃\n0: 프로그램 종료");
+            updateCommand("1. 공지사항 보기\n2. 출석 체크\n3. 미니 퀴즈\n4. 강의 대화 입장\n5. 강의실 나가기\n\n\n\n9: 로그아웃\n0: 프로그램 종료");
             break;
             
         case Chat:
-            printMessage(CommandWindow, "!quit: 채팅방 나가기\n!user: 채팅방 사용자 보기");
+            updateCommand("!quit: 대화 나가기\n!user: 현재 사용자");
             break;
 
         default:
             break;
     }
-}
-
-// UserInputWindow의 사용자 입력을 업데이트
-void updateUserInput()
-{
-    wclear(UserInputWindow);
-    printMessage(UserInputWindow, "%s: %s", UserInputGuide, UserInputBuffer);
 }
 
 void updateCommandAndInput()
@@ -439,12 +461,10 @@ void updateCommandAndInput()
     {
         setInputGuide("명령어를 입력하세요");
         updateCommandList();
-        updateUserInput();
     }
     else
     {
         receiveArgument();
-
     }
 }
 
@@ -570,3 +590,24 @@ void chatRequest(enum Command command)
     sendDataPack(&dataPack);
 }
 
+void drawLayoutByStatus()
+{
+    switch (CurrentClientStatus)
+    {
+        case Login:
+            drawLoginLayout();
+            break;
+        case LectureBrowser:
+            drawDefaultLayout();
+            break;
+        case Lobby:
+            drawLectureLayout();
+            break;
+        case Chat:
+            drawLectureLayout();
+            break;
+        default:
+            drawDefaultLayout();
+            break;
+    }
+}
