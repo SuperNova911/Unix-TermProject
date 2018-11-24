@@ -1,5 +1,9 @@
 #include <time.h>
 #include <stdbool.h>
+#include <sqlite3.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define DB_PATH "데이터베이스 경로"
 #define LECTURE_MAX_MEMBER 60
@@ -7,13 +11,13 @@
 // 사용자 권한
 typedef enum
 {
-    None, Admin, Student, Professor
-} Role;
+    None, Admin, Student, Professor         //None 0,Admin 1, Student 2, Professor 3
+} Role;                                 
 
 // 사용자 정보 구조체
 typedef struct User_t
 {
-    char studentID[16];
+    int studentID[16];
     char hashedPassword[64];
     char userName[16];
     Role role; 
@@ -24,7 +28,7 @@ typedef struct User_t
 typedef struct Lecture_t
 {
     int lectureID;
-    char professorID[16];
+    int professorID[16];
     char lectureName[128];
     char memeberList[LECTURE_MAX_MEMBER][16];
     time_t createDate;
@@ -34,7 +38,7 @@ typedef struct Lecture_t
 typedef struct AttendanceCheckLog_t
 {
     int lectureID;
-    char studentID[16];
+    int studentID[16];
     char IP[16];
     char quizAnswer[512];
     time_t checkDate;
@@ -49,9 +53,9 @@ typedef struct ChatLog_t
     time_t date;
 } ChatLog;
 
-bool createNewDatabase();       // 새로운 데이터베이스 생성
-bool connectToDatabase();       // 데이터베이스에 연결
-bool closeDatabase():           // 데이터베이스 닫기
+bool createNewDatabase(bool SeclectStructure);       // 새로운 데이터베이스 생성
+//bool connectToDatabase();                          // 데이터베이스에 연결
+bool closeDatabase(bool SeclectStructure):           // 데이터베이스 닫기
 
 User *loadUser(User user[], int amount, int lectureID);     // DB에서 lectureID가 일치하는 사용자 구조체 배열 반환
 User loadUserByID(char *studentID);                         // DB에서 studentID가 일치하는 사용자 구조체 반환
@@ -72,6 +76,6 @@ AttendanceCheckLog *loadAttendanceCheckLog(AttendanceCheckLog checkLog[], int am
 bool saveAttendanceCheckLog(AttendanceCheckLog checkLog);       // DB에 출석체크 기록 저장
 bool clearAttendanceCheckLog();                                 // AttendanceCheckLog 테이블 초기화
 
-ChatLog *loadChatLog(ChatLog chatLog[], int amount, int lectureID);     // DB에서 lectureID가 일치하는 채팅 기록 구조체 배열 반환
-bool saveChatLog(ChatLog *chatLog);         // DB에 채팅 기록 저장
-bool clearChatLog();                        // ChatLog 테이블 초기화
+ChatLog *loadChatLog(ChatLog chatLog[], int amount, int lectureID);       // DB에서 lectureID가 일치하는 채팅 기록 구조체 배열 반환
+bool saveChatLog(ChatLog *chatLog);                                       // DB에 채팅 기록 저장
+bool clearChatLog();                                                      // ChatLog 테이블 초기화
