@@ -85,7 +85,7 @@ fd_set Master, Reader;
 
 WINDOW *MessageWindow, *MessageWindowBorder;
 WINDOW *CommandWindow, *CommandWindowBorder;
-WINDOW *UserInputWindow, *UserInputWindowBorder;
+WINDOW *InputWindow, *InputWindowBorder;
 
 int main()
 {
@@ -294,19 +294,19 @@ void drawDefaultLayout()
     CommandWindow = newwin(parentY - userInputWindowBorderHeight - 2, commandWindowBorderWidth - 2, 1, parentX - commandWindowBorderWidth + 1);
     CommandWindowBorder = newwin(parentY - userInputWindowBorderHeight, commandWindowBorderWidth, 0, parentX - commandWindowBorderWidth);
 
-    UserInputWindow = newwin(userInputWindowBorderHeight - 2, parentX - 2, parentY - userInputWindowBorderHeight + 1, 1);
-    UserInputWindowBorder = newwin(userInputWindowBorderHeight, parentX, parentY - userInputWindowBorderHeight, 0);
+    InputWindow = newwin(userInputWindowBorderHeight - 2, parentX - 2, parentY - userInputWindowBorderHeight + 1, 1);
+    InputWindowBorder = newwin(userInputWindowBorderHeight, parentX, parentY - userInputWindowBorderHeight, 0);
 
     scrollok(MessageWindow, TRUE);
     scrollok(CommandWindow, TRUE);
 
     drawBorder(MessageWindowBorder, "MESSAGE");
     drawBorder(CommandWindowBorder, "COMMAND");
-    drawBorder(UserInputWindowBorder, "USER INPUT");
+    drawBorder(InputWindowBorder, "USER INPUT");
     
     wrefresh(MessageWindow);
     wrefresh(CommandWindow);
-    wrefresh(UserInputWindow);
+    wrefresh(InputWindow);
 }
 
 // 윈도우 테두리 그리기
@@ -357,7 +357,7 @@ void onClose()
     delwin(MessageWindowBorder);
     delwin(CommandWindow);
     delwin(CommandWindowBorder);
-    delwin(UserInputWindow);
-    delwin(UserInputWindowBorder);
+    delwin(InputWindow);
+    delwin(InputWindowBorder);
     endwin();
 }
