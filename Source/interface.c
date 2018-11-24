@@ -128,6 +128,34 @@ void printMessage(WINDOW *window, const char *format, ...)
     wrefresh(window);
 }
 
+void updateStatus()
+{
+    int parentX, parentY;
+    getmaxyx(StatusWindow, parentY, parentX);
+
+    char timeString[48];
+    char lectureString[64];
+    char professorStatusString[32];
+    char activeUserString[32];
+
+    struct tm *timeData;
+    time_t currentTime;
+    currentTime = time(NULL);
+    timeData = localtime(&currentTime);
+
+    sprintf(timeString, "[현재 시간 %02d:%02d]", timeData->tm_hour, timeData->tm_min);
+    sprintf(lectureString, "강의: %s", "Unix System Prog");
+    sprintf(professorStatusString, "교수님 상태: %s", "온라인");
+    sprintf(activeUserString, "접속 중인 사용자: %d명", 24);
+
+    mvwprintw(StatusWindow, 0, (((parentX + 1) / 2) - (strlen(timeString) / 2)), timeString);
+    mvwprintw(StatusWindow, 1, 1, lectureString);
+    mvwprintw(StatusWindow, 2, 1, professorStatusString);
+    mvwprintw(StatusWindow, 1, (parentX - strlen(activeUserString) + 7), activeUserString);
+
+    wrefresh(StatusWindow);
+}
+
 // 프로그램 종료시 수행
 void onClose()
 {
@@ -146,4 +174,5 @@ void signalResize()
     endwin();
     refresh();
     drawLectureLobbyLayout();
+    updateStatus();
 }

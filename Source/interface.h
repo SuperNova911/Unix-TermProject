@@ -1,6 +1,8 @@
 #include <locale.h>
 #include <ncurses.h>
 #include <signal.h>
+#include <string.h>
+#include <time.h>
 
 #define STATUS_HEIGHT 3
 #define NOTICE_HEIGHT 5
@@ -14,5 +16,6 @@ void drawDefaultLayout();
 void drawLectureLobbyLayout();
 void drawBorder(WINDOW *window, char *windowName);
 void printMessage(WINDOW *window, const char *format, ...);
+void updateStatus();
 void onClose();
 void signalResize();
