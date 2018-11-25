@@ -5,7 +5,7 @@ WINDOW *NoticeWindow, *NoticeWindowBorder;
 WINDOW *EventWindow, *EventWindowBorder;
 WINDOW *MessageWindow, *MessageWindowBorder;
 WINDOW *CommandWindow, *CommandWindowBorder;
-WINDOW *UserInputWindow, *UserInputWindowBorder;
+WINDOW *InputWindow, *InputWindowBorder;
 
 // ncurses라이브러리를 이용한 사용자 인터페이스 초기화
 void initiateInterface()
@@ -33,59 +33,68 @@ void drawDefaultLayout()
     CommandWindow = newwin(parentY - userInputWindowBorderHeight - 2, commandWindowBorderWidth - 2, 1, parentX - commandWindowBorderWidth + 1);
     CommandWindowBorder = newwin(parentY - userInputWindowBorderHeight, commandWindowBorderWidth, 0, parentX - commandWindowBorderWidth);
 
-    UserInputWindow = newwin(userInputWindowBorderHeight - 2, parentX - 2, parentY - userInputWindowBorderHeight + 1, 1);
-    UserInputWindowBorder = newwin(userInputWindowBorderHeight, parentX, parentY - userInputWindowBorderHeight, 0);
+    InputWindow = newwin(userInputWindowBorderHeight - 2, parentX - 2, parentY - userInputWindowBorderHeight + 1, 1);
+    InputWindowBorder = newwin(userInputWindowBorderHeight, parentX, parentY - userInputWindowBorderHeight, 0);
 
     scrollok(MessageWindow, TRUE);
     scrollok(CommandWindow, TRUE);
 
+    wclear(stdscr);
+
     drawBorder(MessageWindowBorder, "MESSAGE");
     drawBorder(CommandWindowBorder, "COMMAND");
-    drawBorder(UserInputWindowBorder, "USER INPUT");
+    drawBorder(InputWindowBorder, "USER INPUT");
 
     wrefresh(MessageWindow);
     wrefresh(CommandWindow);
-    wrefresh(UserInputWindow);
+    wrefresh(InputWindow);
+}
+
+void drawLoginLayout()
+{
+
 }
 
 // 강의실 로비 레이아웃 그리기
-void drawLectureLobbyLayout()
+void drawLectureLayout()
 {
     int parentX, parentY;
     getmaxyx(stdscr, parentY, parentX);
 
-    StatusWindow = newwin(STATUS_HEIGHT, parentX, 0, 0);
+    StatusWindow = newwin(STATUS_HEIGHT, parentX - 2, 0, 1);
 
-    NoticeWindow = newwin(NOTICE_HEIGHT - 2, parentX - EVENT_WIDTH - 2, STATUS_HEIGHT + 1, 1);
+    NoticeWindow = newwin(NOTICE_HEIGHT - 2, parentX - EVENT_WIDTH - 4, STATUS_HEIGHT + 1, 2);
     NoticeWindowBorder = newwin(NOTICE_HEIGHT, parentX - EVENT_WIDTH, STATUS_HEIGHT, 0);
 
-    EventWindow = newwin(EVENT_HEIGHT - 2, EVENT_WIDTH - 2, STATUS_HEIGHT + 1, parentX - EVENT_WIDTH + 1);
+    EventWindow = newwin(EVENT_HEIGHT - 2, EVENT_WIDTH - 4, STATUS_HEIGHT + 1, parentX - EVENT_WIDTH + 2);
     EventWindowBorder = newwin(EVENT_HEIGHT, EVENT_WIDTH, STATUS_HEIGHT, parentX - EVENT_WIDTH);
 
-    MessageWindow = newwin(parentY - STATUS_HEIGHT - NOTICE_HEIGHT - INPUT_HEIGHT - 2, parentX - COMMAND_WIDTH - 2, STATUS_HEIGHT + NOTICE_HEIGHT + 1, 1);
+    MessageWindow = newwin(parentY - STATUS_HEIGHT - NOTICE_HEIGHT - INPUT_HEIGHT - 2, parentX - COMMAND_WIDTH - 4, STATUS_HEIGHT + NOTICE_HEIGHT + 1, 2);
     MessageWindowBorder = newwin(parentY - STATUS_HEIGHT - NOTICE_HEIGHT - INPUT_HEIGHT, parentX - COMMAND_WIDTH, STATUS_HEIGHT + NOTICE_HEIGHT, 0);
 
-    CommandWindow = newwin(parentY - STATUS_HEIGHT - EVENT_HEIGHT - INPUT_HEIGHT - 2, COMMAND_WIDTH - 2, STATUS_HEIGHT + EVENT_HEIGHT + 1, parentX - COMMAND_WIDTH + 1);
+    CommandWindow = newwin(parentY - STATUS_HEIGHT - EVENT_HEIGHT - INPUT_HEIGHT - 2, COMMAND_WIDTH - 4, STATUS_HEIGHT + EVENT_HEIGHT + 1, parentX - COMMAND_WIDTH + 2);
     CommandWindowBorder = newwin(parentY - STATUS_HEIGHT - EVENT_HEIGHT - INPUT_HEIGHT, COMMAND_WIDTH, STATUS_HEIGHT + EVENT_HEIGHT, parentX - COMMAND_WIDTH);
 
-    UserInputWindow = newwin(INPUT_HEIGHT - 2, parentX - 2, parentY - INPUT_HEIGHT + 1, 1);
-    UserInputWindowBorder = newwin(INPUT_HEIGHT, parentX, parentY - INPUT_HEIGHT, 0);
+    InputWindow = newwin(INPUT_HEIGHT - 2, parentX - 4, parentY - INPUT_HEIGHT + 1, 2);
+    InputWindowBorder = newwin(INPUT_HEIGHT, parentX, parentY - INPUT_HEIGHT, 0);
 
     scrollok(NoticeWindow, TRUE);
     scrollok(MessageWindow, TRUE);
+
+    wclear(stdscr);
 
     drawBorder(NoticeWindowBorder, "공지 사항");
     drawBorder(EventWindowBorder, "진행중인 이벤트");
     drawBorder(MessageWindowBorder, "메시지");
     drawBorder(CommandWindowBorder, "명령어");
-    drawBorder(UserInputWindowBorder, "사용자 입력");
+    drawBorder(InputWindowBorder, "사용자 입력");
 
     wrefresh(StatusWindow);
     wrefresh(NoticeWindow);
     wrefresh(EventWindow);
     wrefresh(MessageWindow);
     wrefresh(CommandWindow);
-    wrefresh(UserInputWindow);
+    wrefresh(InputWindow);
 }
 
 // 윈도우 테두리 그리기
@@ -137,6 +146,7 @@ void updateStatus()
     char lectureString[64];
     char professorStatusString[32];
     char activeUserString[32];
+    char lobbyString[32];
 
     struct tm *timeData;
     time_t currentTime;
@@ -147,25 +157,72 @@ void updateStatus()
     sprintf(lectureString, "강의: %s", "Unix System Prog");
     sprintf(professorStatusString, "교수님 상태: %s", "온라인");
     sprintf(activeUserString, "접속 중인 사용자: %d명", 24);
+    sprintf(lobbyString, "%s", "강의실 로비");
+
+    wclear(StatusWindow);
 
     mvwprintw(StatusWindow, 0, (((parentX + 1) / 2) - (strlen(timeString) / 2)), timeString);
-    mvwprintw(StatusWindow, 1, 1, lectureString);
-    mvwprintw(StatusWindow, 2, 1, professorStatusString);
-    mvwprintw(StatusWindow, 1, (parentX - strlen(activeUserString) + 7), activeUserString);
+    mvwprintw(StatusWindow, 1, 0, lectureString);
+    mvwprintw(StatusWindow, 2, 0, professorStatusString);
+    mvwprintw(StatusWindow, 1, (parentX - strlen(activeUserString) + 8), activeUserString);
+    mvwprintw(StatusWindow, 2, (parentX - strlen(lobbyString) + 5), lobbyString);
 
     wrefresh(StatusWindow);
+}
+
+void updateNotice(char *notice)
+{
+    wclear(NoticeWindow);
+    wprintw(NoticeWindow, notice);
+    wrefresh(NoticeWindow);
+}
+
+void updateEvent(bool isAttendanceCheck, bool isQuiz)
+{
+    wclear(EventWindow);
+
+    if (isAttendanceCheck)
+        mvwprintw(EventWindow, 0, 0, "현재 출석체크중 입니다");
+    else
+        mvwprintw(EventWindow, 0, 0, "진행중인 출석체크가 없습니다");
+
+    if (isQuiz)
+        mvwprintw(EventWindow, 1, 0, "현재 퀴즈가 진행중 입니다");
+    else
+        mvwprintw(EventWindow, 1, 0, "진행중인 퀴즈가 없습니다");
+
+    wrefresh(EventWindow);
+}
+
+void updateCommand(char *commandList)
+{
+    wclear(CommandWindow);
+    wprintw(CommandWindow, commandList);
+    wrefresh(CommandWindow);
+}
+
+void updateInput(char *inputGuide, char *userInput)
+{
+    wclear(InputWindow);
+    wprintw(InputWindow, "%s: %s", inputGuide, userInput);
+    wrefresh(InputWindow);
 }
 
 // 프로그램 종료시 수행
 void onClose()
 {
     // ncurses윈도우 종료
+    delwin(StatusWindow);
+    delwin(NoticeWindow);
+    delwin(NoticeWindowBorder);
+    delwin(EventWindow);
+    delwin(EventWindowBorder);
     delwin(MessageWindow);
     delwin(MessageWindowBorder);
     delwin(CommandWindow);
     delwin(CommandWindowBorder);
-    delwin(UserInputWindow);
-    delwin(UserInputWindowBorder);
+    delwin(InputWindow);
+    delwin(InputWindowBorder);
     endwin();
 }
 
@@ -173,6 +230,8 @@ void signalResize()
 {
     endwin();
     refresh();
-    drawLectureLobbyLayout();
+    drawLectureLayout();
     updateStatus();
+    updateNotice("Vigenere sample source code has been uploaded onto our class khub. You may use it for your Lab 4. Vigenere 소스코드를 khub에 올려놓았으니 참고하세요.");
+    updateEvent(true, false);
 }
