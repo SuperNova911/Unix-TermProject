@@ -31,6 +31,12 @@ struct LoginInfo_t
     char password[32];
 } LoginInfo;
 
+struct LectureInfo_t
+{
+    int lectureID;
+    char lectureName[64];
+} CurrentLectureInfo;
+
 void initializeGlobalVariable();
 
 // 서버
@@ -39,6 +45,7 @@ void async();
 void receiveData();
 bool sendDataPack(DataPack *dataPack);
 
+bool composeDataPack(enum Command command);
 bool decomposeDataPack(DataPack *dataPack);
 void sendSampleDataPack();
 
@@ -46,15 +53,14 @@ void getUserInput();
 void setInputGuide(char *inputGuide);
 void receiveUserCommand();
 void receiveArgument();
-void updateCommandList();
-void updateCommandAndInput();
 
-void userRequest(enum Command command);
-void lectureRequest(enum Command command);
-void attendanceRequest(enum Command command);
-void chatRequest(enum Command command);
+void updateLayoutByStatus();
+void updateCommandByStatus();
+void updateInputByStatus();
+void changeClientStatus(enum ClientStatus status);
 
-void drawLayoutByStatus();
+extern const char *UserRoleString[4];
+extern const char *CommandString[37];
 
 // 인터페이스
 extern WINDOW *StatusWindow;
@@ -83,8 +89,7 @@ int main()
     atexit(onClose);
     initiateInterface();
 
-    CurrentClientStatus = Default;
-    drawLayoutByStatus();
+    changeClientStatus(Default);
 
     printMessage(MessageWindow, "Try connect to server...\n");
     while (true)
@@ -99,30 +104,10 @@ int main()
         sleep(3);
     }
 
-    sleep(3);
-    CurrentClientStatus = Login;
-    drawLayoutByStatus();
+    strncpy(LoginInfo.studentID, "201510743", sizeof(LoginInfo.studentID));
+    strncpy(LoginInfo.password, "suwhan77", sizeof(LoginInfo.password));
 
-
-    while (true)
-    {
-        if (/*loginUser(LoginInfo.studentID, LoginInfo.password) || */true)
-            break;
-
-        printMessage(MessageWindow, "Login failed, please check your StudentID or Password\n");
-        getchar();
-        sleep(3);
-    }
-
-    sleep(3);
-    CurrentClientStatus = LectureBrowser;
-    drawLayoutByStatus();
-
-    // lecture brawser
-
-    sleep(3);
-    CurrentClientStatus = Lobby;
-    drawLayoutByStatus();
+    changeClientStatus(Lobby);
 
     async();
 
@@ -137,6 +122,8 @@ void initializeGlobalVariable()
 
     memset(&CurrentUserInfo, 0, sizeof(UserInfo));
     memset(&LoginInfo, 0, sizeof(struct LoginInfo_t));
+    memset(&CurrentLectureInfo, 0, sizeof(struct LectureInfo_t));
+
     memset(UserInputGuide, 0, sizeof(UserInputGuide));
     memset(UserInputBuffer, 0, sizeof(UserInputBuffer));
     for (int index = 0; index < 4; index++)
@@ -152,7 +139,7 @@ bool connectServer()
     ServerSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (ServerSocket == -1)
     {
-        printMessage(MessageWindow, "socket: %s\n", strerror(errno));
+        printMessage(MessageWindow, "socket: '%s'\n", strerror(errno));
         return false;
     }
 
@@ -166,7 +153,7 @@ bool connectServer()
     // 서버에 연결 요청
     if (connect(ServerSocket, (struct sockaddr *)&serverAddr, sizeof(struct sockaddr_in)) == -1)
     {
-        printMessage(MessageWindow, "connect: %s\n", strerror(errno));
+        printMessage(MessageWindow, "connect: '%s'\n", strerror(errno));
         return false;
     }
 
@@ -185,14 +172,13 @@ void async()
 
     while (true)
     {
-        updateCommandAndInput();
 
         Reader = Master;
         if (select(Fdmax + 1, &Reader, NULL, NULL, NULL) == -1)
         {
             if (errno != EINTR)
             {
-                printMessage(MessageWindow, "select: %s\n", strerror(errno));
+                printMessage(MessageWindow, "select: '%s'\n", strerror(errno));
                 sleep(3);
                 return;
             }
@@ -227,7 +213,6 @@ void receiveData()
     char buffer[sizeof(DataPack)] = { 0, };
 
     DataPack receivedDataPack;
-    DataPack *receivedDataPackPtr = &receivedDataPack;
     memset(&receivedDataPack, 0, sizeof(DataPack));
 
     readBytes = recv(ServerSocket, buffer, sizeof(buffer), 0);
@@ -237,7 +222,7 @@ void receiveData()
         case -1:
             close(ServerSocket);
             FD_CLR(ServerSocket, &Master);
-            printMessage(MessageWindow, "recv: %s\n", strerror(errno));
+            printMessage(MessageWindow, "recv: '%s'\n", strerror(errno));
             break;
         
         // 서버와 연결 종료
@@ -251,7 +236,7 @@ void receiveData()
         default:
             if (readBytes == sizeof(DataPack))
             {
-                receivedDataPackPtr = (DataPack *)buffer;
+                memcpy(&receivedDataPack, buffer, sizeof(DataPack));
                 decomposeDataPack(&receivedDataPack);
             }
             else
@@ -262,26 +247,266 @@ void receiveData()
     }
 }
 
+// 매개변수로 받은 Command에 따라 DataPack을 만들고 서버에 전송
+// [매개변수] command: 전송할 DataPack의 Command 종류
+// [반환] true: DataPack 전송 성공, false: 잘못된 Command 매개변수
+bool composeDataPack(enum Command command)
+{
+    DataPack dataPack;
+    memset(&dataPack, 0, sizeof(DataPack));
+
+    dataPack.command = command;
+    memcpy(&dataPack.userInfo, &CurrentUserInfo, sizeof(UserInfo));
+
+    switch (dataPack.command)
+    {
+        case USER_LOGIN_REQUEST:
+            buildDataPack(&dataPack, LoginInfo.studentID, LoginInfo.password, NULL, NULL, NULL);
+            memset(&LoginInfo, 0, sizeof(struct LoginInfo_t));
+            break;
+        
+        case USER_LOGOUT_REQUEST:
+            break;
+
+        case LECTURE_LIST_REQUEST:
+            break;
+        
+        case LECTURE_CREATE_REQUEST:
+            buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, NULL);
+            break;
+        
+        case LECTURE_REMOVE_REQUEST:
+            buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, NULL);
+            break;
+        
+        case LECTURE_ENTER_REQUEST:
+            buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, NULL);
+            break;
+        
+        case LECTURE_LEAVE_REQUEST:
+            buildDataPack(&dataPack, CurrentLectureInfo.lectureName, NULL, NULL, NULL, NULL);
+            break;
+        
+        case LECTURE_REGISTER_REQUEST:
+            buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, NULL);
+            break;
+        
+        case LECTURE_DEREGISTER_REQUEST:
+            buildDataPack(&dataPack, CurrentLectureInfo.lectureName, NULL, NULL, NULL, NULL);
+            break;
+
+        case ATTENDANCE_START_REQUEST:
+            buildDataPack(&dataPack, Arguments[0], Arguments[1], NULL, NULL, UserInputBuffer);
+            break;
+        
+        case ATTNEDANCE_STOP_REQUEST:
+            break;
+
+        case ATTNEDANCE_EXTEND_REQUEST:
+            buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, NULL);
+            break;
+        
+        case ATTENDANCE_RESULT_REQUEST:
+            break;
+        
+        case ATTENDANCE_CHECK_REQUEST:
+            buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, UserInputBuffer);
+            break;
+
+        case CHAT_ENTER_REQUEST:
+            break;
+        
+        case CHAT_LEAVE_REQUEST:
+            break;
+        
+        case CHAT_USER_LIST_REQUEST:
+            break;
+        
+        case CHAT_SEND_MESSAGE_REQUEST:
+            buildDataPack(&dataPack, NULL, NULL, NULL, NULL, UserInputBuffer);
+            break;
+
+        default:
+            return false;
+    }
+
+    if (sendDataPack(&dataPack))
+        return true;
+    else
+        return false;
+}
+
 // 서버에게 전송 받은 DataPack의 Command에 따라 지정된 작업을 수행
 // [매개변수] dataPack: 전송 받은 DataPack
-// [반환] true: , false: 
+// [반환] true: 성공적으로 DataPack 분석을 함, false: 잘못된 DataPack의 Command
 bool decomposeDataPack(DataPack *dataPack)
 {
     printMessage(MessageWindow, "command: '%d', message: '%s'\n", dataPack->command, dataPack->message);
 
     switch(dataPack->command)
     {
-        case LECTURE_LIST_REQUEST:
+        case USER_LOGIN_RESPONSE:
+            if (dataPack->result)
+            {
+                changeClientStatus(LectureBrowser);
+                printMessage(MessageWindow, "로그인 성공, 학번: '%s', 이름: '%s', 역할: '%s'\n", dataPack->userInfo.studentID, dataPack->userInfo.userName, UserRoleString[dataPack->userInfo.role]);
+            }
+            else
+                printMessage(MessageWindow, "로그인에 실패하였습니다. 학번 또는 비밀번호를 확인하세요.\n");
+            break;
+        case USER_LOGOUT_RESPONSE:
+            if (dataPack->result)
+            {
+                changeClientStatus(Login);
+                printMessage(MessageWindow, "정상적으로 로그아웃 되었습니다.\n");
+            }
+            else
+                printMessage(MessageWindow, "로그아웃을 시도하던 중 문제가 발생하였습니다. 오류: '%s'\n", dataPack->message);
             break;
 
-        case LECTURE_CREATE_REQUEST:
+        case LECTURE_LIST_RESPONSE:
+            if (dataPack->result)
+            {
+                printMessage(MessageWindow, "[개설된 강의 목록]\n%s\n", dataPack->message);
+            }
+            else
+                printMessage(MessageWindow, "강의 목록을 불러올 수 없습니다. 오류: '%s'\n");
             break;
-        
+        case LECTURE_CREATE_RESPONSE:
+            if (dataPack->result)
+            {
+                printMessage(MessageWindow, "새로운 강의가 개설되었습니다. 강의명: '%s'\n", dataPack->data1);
+            }
+            else
+                printMessage(MessageWindow, "해당 강의를 개설할 수 없습니다. 오류: '%s'\n", dataPack->message);
+            break;
+        case LECTURE_REMOVE_RESPONSE:
+            if (dataPack->result)
+            {
+                printMessage(MessageWindow, "강의가 삭제되었습니다. 강의명: '%s'\n", dataPack->data1);
+            }
+            else
+                printMessage(MessageWindow, "해당 강의를 삭제할 수 없습니다. 오류: '%s'\n", dataPack->message);
+            break;
+        case LECTURE_ENTER_RESPONSE:
+            if (dataPack->result)
+            {
+                changeClientStatus(Lobby);
+                strncpy(CurrentLectureInfo.lectureName, dataPack->data1, sizeof(CurrentLectureInfo.lectureName));
+                CurrentLectureInfo.lectureID = atoi(dataPack->data2);
+                printMessage(MessageWindow, "강의실에 입장하였습니다. 강의명: '%s'\n", dataPack->data1);
+            }
+            else
+                printMessage(MessageWindow, "해당 강의실에 입장할 수 없습니다. 오류: '%s'\n", dataPack->message);
+            break;
+        case LECTURE_LEAVE_RESPONSE:
+            if (dataPack->result)
+            {
+                changeClientStatus(LectureBrowser);
+                printMessage(MessageWindow, "강의실에 퇴장하였습니다. 강의명: '%s'\n", dataPack->data1);
+            }
+            else
+                printMessage(MessageWindow, "강의실에서 나가던 중 문제가 발생하였습니다. 오류: '%s'\n", dataPack->message);
+            break;
+        case LECTURE_REGISTER_RESPONSE:
+            if (dataPack->result)
+            {
+                printMessage(MessageWindow, "강의 가입 요청을 보냈습니다. 강의명: '%s'\n", dataPack->data1);
+            }
+            else
+                printMessage(MessageWindow, "가입 요청을 보내던 중 문제가 발생하였습니다. 오류: '%s'\n", dataPack->message);
+            break;
+        case LECTURE_DEREGISTER_RESPONSE:
+            if (dataPack->result)
+            {
+                printMessage(MessageWindow, "강의 탈퇴 요청을 보냈습니다. 강의명: '%s'\n", dataPack->data1);
+            }
+            else
+                printMessage(MessageWindow, "탈퇴 요청을 보내던 중 문제가 발생하였습니다. 오류: '%s'\n", dataPack->message);
+            break;
+
+        case ATTENDANCE_START_RESPONSE:
+            if (dataPack->result)
+            {
+                printMessage(MessageWindow, "출석체크를 시작합니다. 출석체크는 '%s'분 간 진행됩니다.\n종료 시간: '%s'\n", dataPack->data1, dataPack->data2);
+            }
+            else
+                printMessage(MessageWindow, "출석체크 시작 요청을 보내던 중 문제가 발생하였습니다. 오류: '%s'\n", dataPack->message);
+            break;
+        case ATTNEDANCE_STOP_RESPONSE:
+            if (dataPack->result)
+            {
+                printMessage(MessageWindow, "출석체크를 종료합니다.\n");
+            }
+            else
+                printMessage(MessageWindow, "출석체크를 종료 할 수 없습니다. 오류: '%s'\n", dataPack->message);
+            break;
+        case ATTNEDANCE_EXTEND_RESPONSE:
+            if (dataPack->result)
+            {
+                printMessage(MessageWindow, "출석체크를 '%d'분 연장합니다.\n종료 시간: '%s'\n", dataPack->data1, dataPack->data2);
+            }
+            else
+                printMessage(MessageWindow, "출석체크 시간 연장을 할 수 없습니다. 오류: '%s'\n", dataPack->message);
+            break;
+        case ATTENDANCE_RESULT_RESPONSE:
+            if (dataPack->result)
+            {
+                printMessage(MessageWindow, "[출석체크 결과]\n%s\n", dataPack->message);
+            }
+            else
+                printMessage(MessageWindow, "출석체크 결과를 요청할 수 없습니다. 오류: '%s'\n", dataPack->message);
+            break;
+        case ATTENDANCE_CHECK_RESPONSE:
+            if (dataPack->result)
+            {
+                printMessage(MessageWindow, "성공적으로 출석체크를 하였습니다.\n");
+            }
+            else
+                printMessage(MessageWindow, "출석체크를 하지 못했습니다. 오류: '%s'\n", dataPack->message);
+            break;
+
+        case CHAT_ENTER_RESPONSE:
+            if (dataPack->result)
+            {
+                changeClientStatus(Chat);
+                printMessage(MessageWindow, "강의 대화에 입장하였습니다. 현재 '%s'명이 대화 중 입니다.\n", dataPack->data1);
+            }
+            else
+                printMessage(MessageWindow, "강의 대화에 입장 할 수 없습니다. 오류: '%s'\n", dataPack->message);
+            break;
+        case CHAT_LEAVE_RESPONSE:
+            if (dataPack->result)
+            {
+                changeClientStatus(Lobby);
+                printMessage(MessageWindow, "강의 대화에서 퇴장하였습니다.\n");
+            }
+            else
+                printMessage(MessageWindow, "강의 대화에서 나가던 중 문제가 발생하였습니다. 오류: '%s'\n", dataPack->message);
+            break;
+        case CHAT_USER_LIST_RESPONSE:
+            if (dataPack->result)
+            {
+                printMessage(MessageWindow, "[강의 대화에 접속중인 멤버 목록]\n%s\n", dataPack->message);
+            }
+            else
+                printMessage(MessageWindow, "강의 대화에 접속중인 멤버 목록을 불러올 수 없습니다. 오류: '%s'\n", dataPack->message);
+            break;
+        case CHAT_SEND_MESSAGE_RESPONSE:
+            if (dataPack->result)
+            {
+                printMessage(MessageWindow, "%s [%s] %s\n", dataPack->data2, dataPack->data1, dataPack->message);
+            }
+            else
+                printMessage(MessageWindow, "메시지를 전송 할 수 없습니다. 오류: '%s'\n", dataPack->message);
+            break;
+
         default:
-            break;
+            printMessage(MessageWindow, "Invaild DataPack received, command: '%d'\n", dataPack->command);
+            return false;
     }
 
-    return false;
+    return true;
 }
 
 // 서버에게 DataPack을 전송
@@ -289,22 +514,28 @@ bool decomposeDataPack(DataPack *dataPack)
 // [반환] true: 전송 성공, false: 전송 실패
 bool sendDataPack(DataPack *dataPack)
 {
-    // printMessage(MessageWindow, "command: '%d', message: '%s'\n", dataPack->command, dataPack->message);
-
     int sendBytes;
 
     sendBytes = send(ServerSocket, (char *)dataPack, sizeof(DataPack), 0);
     switch (sendBytes)
     {
         case -1:
-            return false;
+            printMessage(MessageWindow, "데이터를 전송하는 중 문제가 발생하였습니다. send: '%s'\n", strerror(errno));
+            break;
         
         case 0:
-            return false;
+            printMessage(MessageWindow, "서버와 연결할 수 없습니다.\n");
+            break;
         
         default:
-            return true;
+            if (sendBytes == sizeof(DataPack))
+                return true;
+                
+            printMessage(MessageWindow, "데이터를 완전히 전송하는데에 실패하였습니다. 잠시 후 다시 시도하세요.\n");
+            break;
     }
+
+    return false;
 }
 
 // DataPack 전송 테스트
@@ -331,7 +562,7 @@ void getUserInput()
     {
         // 엔터
         case 13:
-            sendSampleDataPack();
+            receiveUserCommand();
             memset(UserInputBuffer, 0, sizeof(UserInputBuffer));
             break;
 
@@ -353,7 +584,7 @@ void getUserInput()
             }
     }
 
-    updateInput(UserInputGuide, UserInputBuffer);
+    updateInputByStatus();
 }
 
 void setInputGuide(char *inputGuide)
@@ -370,21 +601,26 @@ void receiveUserCommand()
     switch (CurrentClientStatus)
     {
         case Login:
+            composeDataPack(USER_LOGIN_REQUEST);
             break;
 
-//printMessage(CommandWindow, "1: 강의 목록 보기\n2: 강의 입장\n\n9: 로그아웃\n0: 프로그램 종료");
         case LectureBrowser:
             switch (atoi(UserInputBuffer))
             {
                 case 1:
+                    composeDataPack(LECTURE_LIST_REQUEST);
                     break;
                 case 2:
+                    composeDataPack(LECTURE_ENTER_REQUEST);
                     break;
                 case 9:
+                    composeDataPack(USER_LOGOUT_REQUEST);
                     break;
                 case 0:
+                    //exitPrograme();
                     break;
                 default:
+                    printMessage(MessageWindow, "잘못된 명령어 입력: '%s'\n", UserInputBuffer);
                     break;
             }
             break;
@@ -393,20 +629,56 @@ void receiveUserCommand()
             switch (atoi(UserInputBuffer))
             {
                 case 1:
+                    // composeDataPack(LECTURE_NOTICE_REQUEST);
                     break;
                 case 2:
+                    composeDataPack(ATTENDANCE_CHECK_REQUEST);
                     break;
                 case 3:
+                    // quizRequest(QUIZ_REQUEST);
+                    break;
+                case 4:
+                    composeDataPack(CHAT_ENTER_REQUEST);
+                    break;
+                case 5:
+                    composeDataPack(LECTURE_LEAVE_REQUEST);
+                    break;
+                case 9:
+                    composeDataPack(USER_LOGOUT_REQUEST);
+                    break;
+                case 0:
+                    //exitPrograme();
                     break;
                 default:
+                    printMessage(MessageWindow, "잘못된 명령어 입력: '%s'\n", UserInputBuffer);
                     break;
             }
             break;
 
         case Chat:
+            if (UserInputBuffer[0] == '!')
+            {
+                if (strcmp(UserInputBuffer, "!quit") == 0)
+                {
+                    composeDataPack(CHAT_LEAVE_REQUEST);
+                }
+                else if (strcmp(UserInputBuffer, "!user") == 0)
+                {
+                    composeDataPack(CHAT_USER_LIST_REQUEST);
+                }
+                else
+                {
+                    printMessage(MessageWindow, "잘못된 명령어 입력: '%s'\n", UserInputBuffer);
+                }
+            }
+            else
+            {
+                composeDataPack(CHAT_SEND_MESSAGE_REQUEST);
+            }
             break;
 
         default:
+            printMessage(MessageWindow, "Invaild client status\n");
             break;
     }
 }
@@ -427,170 +699,12 @@ void receiveArgument()
 
             }
 
-
-    }
-}
-
-// CommandWindow의 명령어 목록을 ClientStatus에 따라 업데이트
-void updateCommandList()
-{
-    switch (CurrentClientStatus)
-    {
-        case Login:
-            break;
-
-        case LectureBrowser:
-            updateCommand("1: 강의 목록 보기\n2: 강의 입장\n\n\n\n\n\n\n9: 로그아웃\n0: 프로그램 종료");
-        
-        case Lobby:
-            updateCommand("1. 공지사항 보기\n2. 출석 체크\n3. 미니 퀴즈\n4. 강의 대화 입장\n5. 강의실 나가기\n\n\n\n9: 로그아웃\n0: 프로그램 종료");
-            break;
-            
-        case Chat:
-            updateCommand("!quit: 대화 나가기\n!user: 현재 사용자");
-            break;
-
         default:
             break;
     }
 }
 
-void updateCommandAndInput()
-{
-    if (CurrentRequest == None)
-    {
-        setInputGuide("명령어를 입력하세요");
-        updateCommandList();
-    }
-    else
-    {
-        receiveArgument();
-    }
-}
-
-void userRequest(enum Command command)
-{
-    DataPack dataPack;
-    memset(&dataPack, 0, sizeof(DataPack));
-
-    dataPack.command = command;
-    memcpy(&dataPack.userInfo, &CurrentUserInfo, sizeof(UserInfo));
-
-    switch (command)
-    {
-        case USER_LOGIN_REQUEST:
-            buildDataPack(&dataPack, LoginInfo.studentID, LoginInfo.password, NULL, NULL, NULL);
-            memset(&LoginInfo, 0, sizeof(struct LoginInfo_t));
-            break;
-        
-        case USER_LOGOUT_REQUEST:
-            memcpy(&dataPack.userInfo, &CurrentUserInfo, sizeof(UserInfo));
-            break;
-        
-        default:
-            return;
-    }
-
-    sendDataPack(&dataPack);
-}
-
-void lectureRequest(enum Command command)
-{
-    DataPack dataPack;
-    memset(&dataPack, 0, sizeof(DataPack));
-
-    dataPack.command = command;
-    memcpy(&dataPack.userInfo, &CurrentUserInfo, sizeof(UserInfo));
-
-    switch (command)
-    {
-        case LECTURE_LIST_REQUEST:
-            break;
-        
-        case LECTURE_CREATE_REQUEST:
-            break;
-        
-        case LECTURE_REMOVE_REQUEST:
-            break;
-        
-        case LECTURE_ENTER_REQUEST:
-            break;
-        
-        case LECTURE_LEAVE_REQUEST:
-            break;
-        
-        case LECTURE_REGISTER_REQUEST:
-            break;
-        
-        case LECTURE_DEREGISTER_REQUEST:
-            break;
-
-        default:
-            return;
-    }
-
-    sendDataPack(&dataPack);
-}
-
-void attendanceRequest(enum Command command)
-{
-    DataPack dataPack;
-    memset(&dataPack, 0, sizeof(DataPack));
-
-    dataPack.command = command;
-    memcpy(&dataPack.userInfo, &CurrentUserInfo, sizeof(UserInfo));
-
-    switch (command)
-    {
-        case ATTENDANCE_START_REQUEST:
-            break;
-        
-        case ATTNEDANCE_STOP_REQUEST:
-            break;
-        
-        case ATTENDANCE_RESULT_REQUEST:
-            break;
-        
-        case ATTENDANCE_CHECK_REQUEST:
-            break;
-
-        default:
-            return;
-    }
-
-    sendDataPack(&dataPack);
-}
-
-void chatRequest(enum Command command)
-{
-    DataPack dataPack;
-    memset(&dataPack, 0, sizeof(DataPack));
-
-    dataPack.command = command;
-    memcpy(&dataPack.userInfo, &CurrentUserInfo, sizeof(UserInfo));
-
-    switch (command)
-    {
-        case CHAT_ENTER_REQUEST:
-            break;
-        
-        case CHAT_LEAVE_REQUEST:
-            break;
-        
-        case CHAT_USER_LIST_REQUEST:
-            break;
-        
-        case CHAT_SEND_MESSAGE_REQUEST:
-            break;
-
-        default:
-            return;
-    }
-
-    sendDataPack(&dataPack);
-}
-
-void drawLayoutByStatus()
+void updateLayoutByStatus()
 {
     switch (CurrentClientStatus)
     {
@@ -608,6 +722,92 @@ void drawLayoutByStatus()
             break;
         default:
             drawDefaultLayout();
+            break;
+    }
+}
+
+// CommandWindow의 명령어 목록을 ClientStatus에 따라 업데이트
+void updateCommandByStatus()
+{
+    switch (CurrentClientStatus)
+    {
+        case Login:
+            break;
+
+        case LectureBrowser:
+            updateCommand("1: 강의 목록 보기\n2: 강의 입장\n\n\n\n\n\n\n9: 로그아웃\n0: 프로그램 종료");
+            break;
+        
+        case Lobby:
+            updateCommand("1. 공지사항 보기\n2. 출석 체크\n3. 미니 퀴즈\n4. 강의 대화 입장\n5. 강의실 나가기\n\n\n\n9: 로그아웃\n0: 프로그램 종료");
+            break;
+            
+        case Chat:
+            updateCommand("!quit: 대화 나가기\n!user: 현재 사용자");
+            break;
+
+        default:
+            break;
+    }
+} 
+
+void updateInputByStatus()
+{
+    switch (CurrentClientStatus)
+    {
+        case Login:
+            strncpy(UserInputGuide, "Input", sizeof(UserInputGuide));
+            break;
+
+        case LectureBrowser:
+            strncpy(UserInputGuide, "명령어를 입력하세요", sizeof(UserInputGuide));
+            break;
+
+        case Lobby:
+            strncpy(UserInputGuide, "명령어를 입력하세요", sizeof(UserInputGuide));
+            break;
+
+        case Chat:
+            strncpy(UserInputGuide, "메시지를 입력하세요", sizeof(UserInputGuide));
+            break;
+    
+        default:
+            strncpy(UserInputGuide, "Input", sizeof(UserInputGuide));
+            break;
+    }
+
+    updateInput(UserInputGuide, UserInputBuffer);
+}
+
+void changeClientStatus(enum ClientStatus status)
+{
+    CurrentClientStatus = status;
+
+    updateLayoutByStatus();
+    updateCommandByStatus();
+    updateInputByStatus();
+
+    switch (CurrentClientStatus)
+    {
+        case Login:
+            break;
+
+        case LectureBrowser:
+            break;
+
+        case Lobby:
+            updateStatus();
+            updateNotice("엄준식 엄톰식 엄흉길");
+            updateEvent(true, false);
+            break;
+
+        case Chat:
+            updateStatus();
+            updateNotice("도파 압도 도파고");
+            updateEvent(false, true);
+            break;
+        
+        default:
             break;
     }
 }
