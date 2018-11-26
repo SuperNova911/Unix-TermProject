@@ -45,6 +45,14 @@ void lectureLeave(int receiver, char *lectureName);
 void lectureRegister(int receiver, char *lectureName);
 void lectureDeregister(int receiver, char *lectureName);
 
+bool addUserToList(User *user);
+bool removeUserFromList(char *studentID);
+bool getUserFromList(User *user, char *studentID);
+
+bool loadLectureList();
+
+int userCount;
+int lectureCount;
 User userList[MAX_CLIENT];
 Lecture lectureList[MAX_LECTURE];
 
@@ -61,7 +69,7 @@ extern WINDOW *InputWindow, *InputWindowBorder;
 int main()
 {
     initializeGlobalVariable();
-    
+
     atexit(onClose);
     initiateInterface();
 
@@ -77,6 +85,9 @@ int main()
 // 전역 변수 초기화
 void initializeGlobalVariable()
 {
+    userCount = 0;
+    lectureCount = 0;
+
     for (int index = 0; index < MAX_CLIENT; index++)
         memset(&userList[index], 0, sizeof(User));
     for (int index = 0; index < MAX_LECTURE; index++)
@@ -286,22 +297,21 @@ void userLogin(int receiver, char *studentID, char *password)
     DataPack dataPack;
     resetDataPack(&dataPack);
 
-    // if (loginUser(studentID, password))
-    // {
-    //     User user = loadUserByID(studentID);
+    if (loginUser(studentID, password))
+    {
+        User user = loadUserByID(studentID);
+        addUserToList(&user);
 
-    //     dataPack.result = true;
-    //     dataPack.userInfo.role = user.role;
-    //     strncpy(dataPack.userInfo.userName, user.userName, sizeof(dataPack.userInfo.userName));
-    //     strncpy(dataPack.userInfo.studentID, user.studentID, sizeof(dataPack.userInfo.studentID));
-    //     return true;
-    // }
-    // else
-    // {
-    //     dataPack.result = false;
-    //     strncpy(dataPack.message, "학번 또는 비밀번호가 틀립니다.");
-    //     return false;
-    // }
+        dataPack.result = true;
+        dataPack.userInfo.role = user.role;
+        strncpy(dataPack.userInfo.userName, user.userName, sizeof(dataPack.userInfo.userName));
+        strncpy(dataPack.userInfo.studentID, user.studentID, sizeof(dataPack.userInfo.studentID));
+    }
+    else
+    {
+        dataPack.result = false;
+        strncpy(dataPack.message, "학번 또는 비밀번호가 틀립니다.");
+    }
 
     sendDataPack(receiver, &dataPack);
 }
@@ -311,6 +321,16 @@ void userLogout(int receiver, UserInfo *userInfo)
     DataPack dataPack;
     resetDataPack(&dataPack);
 
+    if (removeUserFromList(userInfo->studentID))
+    {
+        dataPack.result = true;
+    }
+    else
+    {
+        dataPack.result = false;
+        strncpy(dataPack.message, "이미 로그아웃 하였습니다.");
+    }
+
     sendDataPack(receiver, &dataPack);
 }
 
@@ -319,6 +339,11 @@ void lectureList(int receiver)
     DataPack dataPack;
     resetDataPack(&dataPack);
 
+    for (int index = 0; index < lectureCount; index++)
+    {
+
+    }
+
     sendDataPack(receiver, &dataPack);
 }
 
@@ -326,6 +351,18 @@ void lectureCreate(int receiver, char *lectureName)
 {
     DataPack dataPack;
     resetDataPack(&dataPack);
+
+    if ((lectureCount + 1) = MAX_LECTURE)
+    {
+        dataPack.result = false;
+        strncpy(dataPack.message, "더 이상 강의를 개설할 수 없습니다.");
+    }
+    else
+    {
+        Lecture newLecture;
+        newLecture = 
+        lectureList[lectureCount]
+    }
 
     sendDataPack(receiver, &dataPack);
 }
@@ -374,6 +411,65 @@ void lectureDeregister(int receiver, char *lectureName)
 // [매개변수] receiver: 전송 대상 클라이언트 소켓, dataPack: 전송 할 DataPack
 // [반환] true: 전송 성공, false: 전송 실패
 bool sendDataPack(int receiver, DataPack *dataPack)
+{
+    return false;
+}
+
+// UserList에 새로운 User를 추가
+// [매개변수] user: 리스트에 추가 할 User구조체
+// [반환] true: 리스트에 추가 성공, false: 리스트가 가득 참
+bool addUserToList(User *user)
+{
+    if (userCount + 1 < MAX_CLIENT)
+    {
+        userList[userCount] = *user;
+        userCount++;
+        return true;
+    }
+
+    return false;
+}
+
+// UserList에서 studentID가 일치 하는 User 삭제
+// [매개변수] studentID: 삭제 할 User의 studentID
+// [반환] true: 리스트에서 삭제 됨, false: 리스트가 비어 있거나 studentID가 일치하는 User가 없음
+bool removeUserFromList(char *studentID)
+{
+    if (userCount < 1)
+        return false;
+
+    for (int index = 0; index < userCount - 1; index++)
+    {
+        if (strcmp(userList[index].studentID, studentID) == 0)
+        {
+            userList[index] = userList[userCount];
+            memset(&userList[userCount], 0, sizeof(User));
+            userCount--;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// UserList에서 studentID가 일치하는 User를 가져옴
+// [매개변수] user: 검색 결과를 받을 User포인터, studentID: 검색 할 User의 studentID
+// [반환] true: studentID가 일치하는 User가 있음, false: studentID가 일치하는 User가 없음
+bool getUserFromList(User *user, char *studentID)
+{
+    for (int index = 0; index < userCount; index++)
+    {
+        if (strcmp(userList[index].studentID, studentID) == 0)
+        {
+            user = &userList[index];
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool loadLectureList()
 {
     return false;
 }
