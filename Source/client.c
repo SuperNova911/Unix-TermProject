@@ -1,4 +1,3 @@
-// #include "database.h"
 #include "dataPack.h"
 #include "interface.h"
 
@@ -31,7 +30,7 @@ struct LoginInfo_t
     char password[32];
 } LoginInfo;
 
-struct LectureInfo_t
+struct CurrentLectureInfo_t
 {
     int lectureID;
     char lectureName[64];
@@ -122,7 +121,7 @@ void initializeGlobalVariable()
 
     memset(&CurrentUserInfo, 0, sizeof(UserInfo));
     memset(&LoginInfo, 0, sizeof(struct LoginInfo_t));
-    memset(&CurrentLectureInfo, 0, sizeof(struct LectureInfo_t));
+    memset(&CurrentLectureInfo, 0, sizeof(struct CurrentLectureInfo_t));
 
     memset(UserInputGuide, 0, sizeof(UserInputGuide));
     memset(UserInputBuffer, 0, sizeof(UserInputBuffer));
