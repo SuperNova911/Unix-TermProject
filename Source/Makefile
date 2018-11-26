@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -W -Wall
+CFLAGS = -W -Wall -lncurses -std=c99
 TARGET = client
 OBJECTS = client.o dataPack.o interface.o
 
