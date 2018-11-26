@@ -27,6 +27,9 @@ void drawDefaultLayout()
     int commandWindowBorderWidth = 22;
     int userInputWindowBorderHeight = 4;
 
+    wclear(stdscr);
+    wrefresh(stdscr);
+
     MessageWindow = newwin(parentY - userInputWindowBorderHeight - 2, parentX - commandWindowBorderWidth - 2, 1, 1);
     MessageWindowBorder = newwin(parentY - userInputWindowBorderHeight, parentX - commandWindowBorderWidth, 0, 0);
 
@@ -38,8 +41,6 @@ void drawDefaultLayout()
 
     scrollok(MessageWindow, TRUE);
     scrollok(CommandWindow, TRUE);
-
-    wclear(stdscr);
 
     drawBorder(MessageWindowBorder, "MESSAGE");
     drawBorder(CommandWindowBorder, "COMMAND");
@@ -61,6 +62,9 @@ void drawLectureLayout()
     int parentX, parentY;
     getmaxyx(stdscr, parentY, parentX);
 
+    wclear(stdscr);
+    wrefresh(stdscr);
+
     StatusWindow = newwin(STATUS_HEIGHT, parentX - 2, 0, 1);
 
     NoticeWindow = newwin(NOTICE_HEIGHT - 2, parentX - EVENT_WIDTH - 4, STATUS_HEIGHT + 1, 2);
@@ -80,8 +84,6 @@ void drawLectureLayout()
 
     scrollok(NoticeWindow, TRUE);
     scrollok(MessageWindow, TRUE);
-
-    wclear(stdscr);
 
     drawBorder(NoticeWindowBorder, "공지 사항");
     drawBorder(EventWindowBorder, "진행중인 이벤트");
