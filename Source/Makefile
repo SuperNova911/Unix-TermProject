@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -W -Wall -lncursesw -std=c99
 OBJECT1 = client.o dataPack.o interface.o
-OBJECT2 = server.o dataPack.o interface.o
+OBJECT2 = server.o dataPack.o interface.o database.o
 
 all : client server
 
