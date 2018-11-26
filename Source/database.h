@@ -1,6 +1,5 @@
 #include <time.h>
 #include <stdbool.h>
-#include <sqlite3.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -11,7 +10,7 @@
 // 사용자 권한
 typedef enum
 {
-    None = 0, Admin = 1, Student = 2, Professor = 3
+    DB_None = 0, DB_Admin = 1, DB_Student = 2, DB_Professor = 3
 } Role;                                 
 
 // 사용자 정보 구조체
@@ -31,7 +30,7 @@ typedef struct Lecture_t
     int memberCount;
     char professorID[16];
     char lectureName[128];
-    char memeberList[LECTURE_MAX_MEMBER][16];
+    char memberList[LECTURE_MAX_MEMBER][16];
     time_t createDate;
 } Lecture;
 
@@ -56,28 +55,28 @@ typedef struct ChatLog_t
 
 bool createNewDatabase();       // 새로운 데이터베이스 생성
 //bool connectToDatabase();       // 데이터베이스에 연결
-bool closeDatabase():           // 데이터베이스 닫기
+bool closeDatabase();           // 데이터베이스 닫기
 
-User *loadUser(User user[], int amount, int lectureID);     // DB에서 lectureID가 일치하는 사용자 구조체 배열 반환
-User loadUserByID(char *studentID);                         // DB에서 studentID가 일치하는 사용자 구조체 반환
+bool loadUser(User *userList, int amount, int lectureID);   // DB에서 lectureID가 일치하는 사용자 구조체 배열 반환
+bool loadUserByID(User *user, char *studentID);             // DB에서 studentID가 일치하는 사용자 구조체 반환
 bool registerUser(User *user);                              // DB에 새로운 사용자 정보 저장
 bool removeUser(char *studentID);                           // DB에서 studentID가 일치하는 사용자 삭제
 bool loginUser(char *studentID, char *hashedPassword);      // DB에서 studentID와 hashedPassword가 일치하는 사용자가 있는지 확인
 bool clearUser();                                           // User 테이블 초기화
 
-Lecture *loadLecture(Lecture lecture[], int amount);            // DB에서 강의 구조체 배열 반환
-Lecture loadLectureByID(int lectureID);                         // DB에서 lectureID가 일치하는 강의 정보 구조체 반환
+bool loadLecture(Lecture *lectureList, int amount);             // DB에서 강의 구조체 배열 반환
+bool loadLectureByID(Lecture *lecture, int lectureID);          // DB에서 lectureID가 일치하는 강의 정보 구조체 반환
 bool createLecture(Lecture *lecture);                           // DB에 새로운 강의 정보 저장
 bool removeLecture(int lectureID);                              // DB에서 lectureID가 일치하는 강의 삭제
 bool lecture_registerUser(int lectureID, char *studentID);      // DB에서 lectureID가 일치하는 강의의 memberList에 studentID추가
 bool lecture_deregisterUser(int lectureID, char *studentID);    // DB에서 lectureID가 일치하는 강의의 memberList에 studentID삭제
 bool clearLecture();                                            // Lecture 테이블 초기화
 
-AttendanceCheckLog *loadAttendanceCheckLog(AttendanceCheckLog checkLog[], int amount, int lectureID);   // DB에서 lectureID가 일치하는 출석체크 기록 구조체 배열 반환
-bool saveAttendanceCheckLog(AttendanceCheckLog checkLog);       // DB에 출석체크 기록 저장
+bool loadAttendanceCheckLog(AttendanceCheckLog *checkLogList, int amount, int lectureID);   // DB에서 lectureID가 일치하는 출석체크 기록 구조체 배열 반환
+bool saveAttendanceCheckLog(AttendanceCheckLog *checkLog);       // DB에 출석체크 기록 저장
 bool clearAttendanceCheckLog();                                 // AttendanceCheckLog 테이블 초기화
 
-ChatLog *loadChatLog(ChatLog chatLog[], int amount, int lectureID);       // DB에서 lectureID가 일치하는 채팅 기록 구조체 배열 반환
+bool loadChatLog(ChatLog *chatLog, int amount, int lectureID);       // DB에서 lectureID가 일치하는 채팅 기록 구조체 배열 반환
 bool saveChatLog(ChatLog *chatLog);                                       // DB에 채팅 기록 저장
 bool clearChatLog();
 
