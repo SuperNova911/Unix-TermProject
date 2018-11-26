@@ -250,11 +250,46 @@ void receiveData(int socket)
 // [반환] true: , false: 
 bool decomposeDataPack(int sender, DataPack *dataPack)
 {
-    printMessage(MessageWindow, "sender: '%d', command: '%d', result: '%d'\ndata1: '%s', data2: '%s'\ndata3: '%s', data4: '%s', message: '%s'\nrole: '%d', userName: '%s', studentID: '%s'", sender, dataPack->command, dataPack->result, dataPack->data1, dataPack->data2, dataPack->data3, dataPack->data4, dataPack->message, dataPack->userInfo.role, dataPack->userInfo.userName, dataPack->userInfo.studentID);
+    printMessage(MessageWindow, "sender: '%d', command: '%d', data1: '%s', data2: '%s', message: '%s'\n",
+        sender, dataPack->command, dataPack->data1, dataPack->data2, dataPack->message);
 
     switch(dataPack->command)
     {
+        case USER_LOGIN_REQUEST:
+            break;
+        case USER_LOGOUT_REQUEST:
+            break;
+        case LECTURE_LIST_REQUEST:
+            break;
+        case LECTURE_CREATE_REQUEST:
+            break;
+        case LECTURE_REMOVE_REQUEST:
+            break;
         case LECTURE_ENTER_REQUEST:
+            break;
+        case LECTURE_LEAVE_REQUEST:
+            break;
+        case LECTURE_REGISTER_REQUEST:
+            break;
+        case LECTURE_DEREGISTER_REQUEST:
+            break;
+        case ATTENDANCE_START_REQUEST:
+            break;
+        case ATTNEDANCE_STOP_REQUEST:
+            break;
+        case ATTNEDANCE_EXTEND_REQUEST:
+            break;
+        case ATTENDANCE_RESULT_REQUEST:
+            break;
+        case ATTENDANCE_CHECK_REQUEST:
+            break;
+        case CHAT_ENTER_REQUEST:
+            break;
+        case CHAT_LEAVE_REQUEST:
+            break;
+        case CHAT_USER_LIST_REQUEST:
+            break;
+        case CHAT_SEND_MESSAGE_REQUEST:
             break;
 
         default:
