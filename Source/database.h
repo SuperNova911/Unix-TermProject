@@ -28,6 +28,7 @@ typedef struct User_t
 typedef struct Lecture_t
 {
     int lectureID;
+    int memberCount;
     int professorID[16];
     char lectureName[128];
     char memeberList[LECTURE_MAX_MEMBER][16];
