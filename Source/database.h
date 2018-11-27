@@ -5,7 +5,7 @@
 #include <stdlib.h>
 
 #define DB_PATH "데이터베이스 경로"
-#define LECTURE_MAX_MEMBER 60
+#define MAX_LECTURE_MEMBER 60
 
 // 사용자 권한
 typedef enum
@@ -30,7 +30,7 @@ typedef struct Lecture_t
     int memberCount;
     char professorID[16];
     char lectureName[128];
-    char memberList[LECTURE_MAX_MEMBER][16];
+    char memberList[MAX_LECTURE_MEMBER][16];
     time_t createDate;
 } Lecture;
 
