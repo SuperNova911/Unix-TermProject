@@ -81,13 +81,3 @@ bool clearAttendanceCheckLog();                                 // AttendanceChe
 ChatLog *loadChatLog(ChatLog chatLog[], int amount, int lectureID);       // DB에서 lectureID가 일치하는 채팅 기록 구조체 배열 반환
 bool saveChatLog(ChatLog *chatLog);                                       // DB에 채팅 기록 저장
 bool clearChatLog();
-
-//---추가---
-bool isItUser;                          //유저들의 데이터베이스인지 확인하는 변수
-bool isItLecture;                       //강의들의 데이터베이스인지 확인하는 변수.
-bool isItAttendanceCheckLog;            //출석체크 기록 데이터베이스인지 확인하는 변수.
-bool isItChatLog;                       //채팅 기록 데이터베이스인지 확인하는 변수.
-
-char *err_msg = 0;                      //에러메시지 변수.
-
-
