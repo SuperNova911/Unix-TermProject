@@ -1,160 +1,69 @@
 #include "database.h"
 
-bool isItUser;                          //유저들의 데이터베이스인지 확인하는 변수
-bool isItLecture;                       //강의들의 데이터베이스인지 확인하는 변수.
-bool isItAttendanceCheckLog;            //출석체크 기록 데이터베이스인지 확인하는 변수.
-bool isItChatLog;                       //채팅 기록 데이터베이스인지 확인하는 변수.
+bool IsItUser;                          //유저들의 데이터베이스인지 확인하는 변수
+bool IsItLecture;                       //강의들의 데이터베이스인지 확인하는 변수.
+bool IsItAttendanceCheckLog;            //출석체크 기록 데이터베이스인지 확인하는 변수.
+bool IsItChatLog;                       //채팅 기록 데이터베이스인지 확인하는 변수.
 
-sqlite3 *dbUser;   
-sqlite3 *dbLecture;
-sqlite3 *dbAttendanceCheckLog;
-sqlite3 *dbChatLog;
+sqlite3 *Db;
 char *err_msg = 0;                      //에러메시지 처리변수.
 
-bool createNewDatabase()
+bool excuteQuery(char *sql)
 {
-	if(isItUser == true)
-    {
-        sqlite3 *dbUser;                            
-	    int rc = sqlite3_open("User.db", &dbUser);
-
-    	if(rc != SQLITE_OK)
-    	{
-	    	fprintf(stderr,"Cannot open database : %s\n", sqlite3_errmsg(dbUser));
-	    	sqlite3_close(dbUser);
-
-	    	return false;
-	    }
-
-	    char *sql =	"DROP TABLE IF EXISTS User;"
-			        "CREATE TABLE User (studentID TEXT, hashedPassword TEXT, userName TEXT, role INT, registerDate INT);";   //role과 Date는 INT로 임시로 잡음
-	    printf("%s\n",sql);
-        rc = sqlite3_exec(dbUser,sql,0,0,&err_msg);
+    int returnCode = sqlite3_exec(dbUser,sql,0,0,&err_msg);
 	
-        if(rc != SQLITE_OK)
-        {
-	       fprintf(stderr,"SQL Error: %s\n", err_msg);
-	       sqlite3_free(err_msg);
-	       sqlite3_close(dbUser);
-
-	       return false;
-	    }
-    }
-    if(isItLecture == true)
+    if(returnCode != SQLITE_OK)
     {
-        sqlite3 *dbLecture;
-        int rc = sqlite3_open("Lecture.db", &dbLecture);
+		fprintf(stderr,"SQL Error: %s\n", err_msg);
+	    sqlite3_free(err_msg);
+	    sqlite3_close(Db);
+	    return false;
+	}
 
-    	if(rc != SQLITE_OK)
-    	{
-	    	fprintf(stderr,"Cannot open database : %s\n", sqlite3_errmsg(dbLecture));
-	    	sqlite3_close(dbLecture);
+	return true;
+}
 
-	    	return false;
-	    }
+bool connectToDatabase()
+{
+	int rc = sqlite3_open(DB_PATH, &Db);
 
-	    char *sql =	"DROP TABLE IF EXISTS Lecture;"
-		        	"CREATE TABLE Lecture (lectureID INT, professorID INT, lectureName TEXT, createDate INT );";        //미완성(인자값하나 못넣음)
-                        
-        rc = sqlite3_exec(dbLecture,sql,0,0,&err_msg);
-	
-        if(rc != SQLITE_OK)
-        {
-	       fprintf(stderr,"SQL Error: %s\n", err_msg);
-	       sqlite3_free(err_msg);
-	       sqlite3_close(dbLecture);
-
-	       return false;
-	    }
-    }
-    if(isItAttendanceCheckLog == true)
+    if(rc != SQLITE_OK)
     {
-        sqlite3 *dbAttendanceCheckLog;
-        int rc = sqlite3_open("AttendanceCheckLog.db", &dbAttendanceCheckLog);
+	    fprintf(stderr,"Cannot open database : %s\n", sqlite3_errmsg(Db));
+	    sqlite3_close(Db);
 
-    	if(rc != SQLITE_OK)
-    	{
-	    	fprintf(stderr,"Cannot open database : %s\n", sqlite3_errmsg(dbAttendanceCheckLog));
-	    	sqlite3_close(dbAttendanceCheckLog);
+	    return false;
+	}
 
-	    	return false;
-	    }
-
-	    char *sql =	"DROP TABLE IF EXISTS AttendanceCheckLog;"
-		        	"CREATE TABLE AttendanceCheckLog (lectureID INT, studentID INT, IP TEXT, quizAnswer TEXT, checkDate INT );"; 
-                        
-        rc = sqlite3_exec(dbAttendanceCheckLog,sql,0,0,&err_msg);
-	
-        if(rc != SQLITE_OK)
-        {
-	       fprintf(stderr,"SQL Error: %s\n", err_msg);
-	       sqlite3_free(err_msg);
-	       sqlite3_close(dbAttendanceCheckLog);
-
-	       return false;
-	    }
+	if(IsItUser == true)
+    {                           
+		excuteQuery("CREATE TABLE IF NOT EXISTS User (studentID TEXT, hashedPassword TEXT, userName TEXT, role INT, registerDate INT);");
     }
-    if(isItChatLog == true)
+	if(IsItLecture == true)
+    {                           
+		excuteQuery("CREATE TABLE IF NOT EXISTS Lecture (lectureID INT, professorID INT, lectureName TEXT, createDate INT );");
+    }
+    if(IsItAttendanceCheckLog == true)
     {
-        sqlite3 *dbChatLog;
-        int rc = sqlite3_open("ChatLog.db", &dbChatLog);
-
-    	if(rc != SQLITE_OK)
-    	{
-	    	fprintf(stderr,"Cannot open database : %s\n", sqlite3_errmsg(dbChatLog));
-	    	sqlite3_close(dbChatLog);
-
-	    	return false;
-	    }
-
-	    char *sql =	"DROP TABLE IF EXISTS ChatLog;"
-		        	"CREATE TABLE ChatLog (lectureID INT, userName TEXT, message TEXT, date INT );";
-                        
-        rc = sqlite3_exec(dbChatLog,sql,0,0,&err_msg);
-	
-        if(rc != SQLITE_OK)
-        {
-	       fprintf(stderr,"SQL Error: %s\n", err_msg);
-	       sqlite3_free(err_msg);
-	       sqlite3_close(dbChatLog);
-
-	       return false;
-	    }
-    }
-    return true;
+		excuteQuery("CREATE TABLE IF NOT EXISTS AttendanceCheckLog (lectureID INT, studentID INT, IP TEXT, quizAnswer TEXT, checkDate INT );");
+	}
+	if(IsItChatLog == true)
+	{
+		excuteQuery("CREATE TABLE IF NOT EXISTS ChatLog (lectureID INT, userName TEXT, message TEXT, date INT );");
+	}
 }
 
 bool closeDatabase()
 {
-    if(isItUser == true)
-    {
-        sqlite3_close(dbUser);
-        return true;
-    }
+	int returnCode = sqlite3_close(Db);
 
-    if(isItLecture == true)
-    {
-        sqlite3_close(dbLecture);
-        return true;
-    }
-
-    if(isItAttendanceCheckLog == true)
-    {
-        sqlite3_close(dbAttendanceCheckLog);
-        return true;
-    }
-
-    if(isItChatLog == true)
-    {
-        sqlite3_close(dbChatLog);
-        return true;
-    }
-
-    printf("데이터베이스를 정상적으로 닫지 못했습니다. 치명적 오류발생!\n");
-    exit(1);
-    return false;
+	if(returnCode != SQLITE_OK)
+	{
+		printf("데이터베이스를 정상적으로 닫지 못했습니다. 치명적 오류발생!\n");
+    	return false;
+	}
 }
-
+//11월26일 수정시작! 10:51a.m
 //새로추가함 11/24 15:25 p.m
 bool registerUser(User *user)                                  // DB에 새로운 사용자 정보 저장
 {
@@ -171,22 +80,22 @@ bool registerUser(User *user)                                  // DB에 새로�
 	strcat(strSQL,"'");
     strcat(strSQL,user->studentID);	
 	strcat(strSQL,"'");
-	strcat(strSQL,",");
+	strcat(strSQL,", ");
 
 	strcat(strSQL,"'");
 	strcat(strSQL,user->hashedPassword);
 	strcat(strSQL,"'");
-    strcat(strSQL,",");
+    strcat(strSQL,", ");
 
 	strcat(strSQL,"'");
 	strcat(strSQL,user->userName);
 	strcat(strSQL,"'");
-   	 strcat(strSQL,",");
+   	 strcat(strSQL,", ");
 
 	//strcat(strSQL,"'");    
     strcat(strSQL,strRole);
 	//strcat(strSQL,"'");
-	strcat(strSQL,",");
+	strcat(strSQL,", ");
     
 	//strcat(strSQL,"'");
    	strcat(strSQL,strRegisterDate);

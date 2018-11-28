@@ -5,7 +5,8 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define DB_PATH "데이터베이스 경로"
+//#define DB_PATH "데이터베이스 경로"
+#define DB_PATH "ServerDatabase.db"
 #define LECTURE_MAX_MEMBER 60
 
 // 사용자 권한
@@ -20,8 +21,8 @@ typedef struct User_t
     char studentID[16];
     char hashedPassword[64];
     char userName[16];
-    int role; 				    //변수 tpye이 Role인데 test하기 위해 잠시 int형으로 바꿈
-    int registerDate;			//변수 tpye이 Role인데 test하기 위해 잠시 time_t형으로 바꿈
+    Role role; 				    //변수 tpye이 Role인데 test하기 위해 잠시 int형으로 바꿈
+    time_t registerDate;			//변수 tpye이 Role인데 test하기 위해 잠시 time_t형으로 바꿈
 } User;
 
 // 강의 정보 구조체
@@ -53,9 +54,10 @@ typedef struct ChatLog_t
     time_t date;
 } ChatLog;
 
-bool createNewDatabase();       // 새로운 데이터베이스 생성
-//bool connectToDatabase();       // 데이터베이스에 연결
+//bool createNewDatabase();       // 새로운 데이터베이스 생성
+bool connectToDatabase();       // 데이터베이스에 연결       //생성 및 연결로 한번에
 bool closeDatabase():           // 데이터베이스 닫기
+bool excuteQuery(char *sql);    // 데이터베이스 실행 및 에러처리.
 
 User *loadUser(User user[], int amount, int lectureID);     // DB에서 lectureID가 일치하는 사용자 구조체 배열 반환
 User loadUserByID(char *studentID);                         // DB에서 studentID가 일치하는 사용자 구조체 반환
