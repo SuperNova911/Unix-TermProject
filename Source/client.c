@@ -106,7 +106,7 @@ int main()
     strncpy(LoginInfo.studentID, "201510743", sizeof(LoginInfo.studentID));
     strncpy(LoginInfo.password, "suwhan77", sizeof(LoginInfo.password));
 
-    changeClientStatus(Lobby);
+    changeClientStatus(Login);
 
     async();
 
@@ -261,7 +261,7 @@ bool composeDataPack(enum Command command)
     {
         case USER_LOGIN_REQUEST:
             buildDataPack(&dataPack, LoginInfo.studentID, LoginInfo.password, NULL, NULL, NULL);
-            memset(&LoginInfo, 0, sizeof(struct LoginInfo_t));
+            // memset(&LoginInfo, 0, sizeof(struct LoginInfo_t));   디버깅
             break;
         
         case USER_LOGOUT_REQUEST:
@@ -279,7 +279,8 @@ bool composeDataPack(enum Command command)
             break;
         
         case LECTURE_ENTER_REQUEST:
-            buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, NULL);
+            buildDataPack(&dataPack, "MyCustomClass", NULL, NULL, NULL, NULL);
+            // buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, NULL);
             break;
         
         case LECTURE_LEAVE_REQUEST:
@@ -347,11 +348,12 @@ bool decomposeDataPack(DataPack *dataPack)
         case USER_LOGIN_RESPONSE:
             if (dataPack->result)
             {
+                memcpy(&CurrentUserInfo, &dataPack->userInfo, sizeof(UserInfo));
                 changeClientStatus(LectureBrowser);
                 printMessage(MessageWindow, "로그인 성공, 학번: '%s', 이름: '%s', 역할: '%s'\n", dataPack->userInfo.studentID, dataPack->userInfo.userName, UserRoleString[dataPack->userInfo.role]);
             }
             else
-                printMessage(MessageWindow, "로그인에 실패하였습니다. 학번 또는 비밀번호를 확인하세요.\n");
+                printMessage(MessageWindow, "로그인에 실패하였습니다. 오류: '%s'\n", dataPack->message);
             break;
         case USER_LOGOUT_RESPONSE:
             if (dataPack->result)
@@ -369,7 +371,7 @@ bool decomposeDataPack(DataPack *dataPack)
                 printMessage(MessageWindow, "[개설된 강의 목록]\n%s\n", dataPack->message);
             }
             else
-                printMessage(MessageWindow, "강의 목록을 불러올 수 없습니다. 오류: '%s'\n");
+                printMessage(MessageWindow, "강의 목록을 불러올 수 없습니다. 오류: '%s'\n", dataPack->message);
             break;
         case LECTURE_CREATE_RESPONSE:
             if (dataPack->result)
@@ -377,7 +379,7 @@ bool decomposeDataPack(DataPack *dataPack)
                 printMessage(MessageWindow, "새로운 강의가 개설되었습니다. 강의명: '%s'\n", dataPack->data1);
             }
             else
-                printMessage(MessageWindow, "해당 강의를 개설할 수 없습니다. 오류: '%s'\n", dataPack->message);
+                printMessage(MessageWindow, "강의를 개설할 수 없습니다. 오류: '%s'\n", dataPack->message);
             break;
         case LECTURE_REMOVE_RESPONSE:
             if (dataPack->result)
@@ -385,7 +387,7 @@ bool decomposeDataPack(DataPack *dataPack)
                 printMessage(MessageWindow, "강의가 삭제되었습니다. 강의명: '%s'\n", dataPack->data1);
             }
             else
-                printMessage(MessageWindow, "해당 강의를 삭제할 수 없습니다. 오류: '%s'\n", dataPack->message);
+                printMessage(MessageWindow, "강의를 삭제할 수 없습니다. 오류: '%s'\n", dataPack->message);
             break;
         case LECTURE_ENTER_RESPONSE:
             if (dataPack->result)
@@ -396,7 +398,7 @@ bool decomposeDataPack(DataPack *dataPack)
                 printMessage(MessageWindow, "강의실에 입장하였습니다. 강의명: '%s'\n", dataPack->data1);
             }
             else
-                printMessage(MessageWindow, "해당 강의실에 입장할 수 없습니다. 오류: '%s'\n", dataPack->message);
+                printMessage(MessageWindow, "강의실에 입장할 수 없습니다. 오류: '%s'\n", dataPack->message);
             break;
         case LECTURE_LEAVE_RESPONSE:
             if (dataPack->result)
@@ -708,7 +710,8 @@ void updateLayoutByStatus()
     switch (CurrentClientStatus)
     {
         case Login:
-            drawLoginLayout();
+            // drawLoginLayout();
+            drawDefaultLayout();
             break;
         case LectureBrowser:
             drawDefaultLayout();
