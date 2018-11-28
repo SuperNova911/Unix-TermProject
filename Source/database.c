@@ -1,85 +1,130 @@
 #include "database.h"
 
-bool IsItUser;                          //유저들의 데이터베이스인지 확인하는 변수
-bool IsItLecture;                       //강의들의 데이터베이스인지 확인하는 변수.
-bool IsItAttendanceCheckLog;            //출석체크 기록 데이터베이스인지 확인하는 변수.
-bool IsItChatLog;                       //채팅 기록 데이터베이스인지 확인하는 변수.
+//에러가 발생하게되면 에러메시지를 띄우고 MYSQL 구조체함수 핸들링을 그만하게한다.
+bool handlingError(MYSQL *Connect)
+{
+	fprintf(stderr,"%s\n",mysql_error(Connect));
+	mysql_close(Connect);
+}
 
-sqlite3 *Db;
-char *err_msg = 0;                      //에러메시지 처리변수.
-
+//mysql_query함수에 에러처리까지 검사하는 함수가 자주쓰여서 만든 쿼리실행문 함수입니다.
 bool excuteQuery(char *sql)
 {
-    int returnCode = sqlite3_exec(dbUser,sql,0,0,&err_msg);
-	
-    if(returnCode != SQLITE_OK)
-    {
-		fprintf(stderr,"SQL Error: %s\n", err_msg);
-	    sqlite3_free(err_msg);
-	    sqlite3_close(Db);
-	    return false;
+	if(mysql_query(Connect,sql) != 0)
+	{
+		handlingError(Connect);
+		return false;
 	}
 
 	return true;
 }
 
+//MySQL 서버를 핸들링할 객체를 메모리에 할당하고 초기화 하는 함수.
+//NULL 반환시 예외처리 시키고 종료한다.
+bool initializeDatabase()
+{
+	Connect = mysql_init(NULL);
+
+	if(Connect == NULL)
+	{
+		fprintf(stderr,"mysql_init() 함수 실패\n");
+		return false;
+	}
+
+	return true;
+}
+
+/*database에 연결하는 함수
+mysql_real_connect라는 함수를 이용한다. 만약 이 함수가 NULL을 반환하게되면 예외처리 시키고 종료한다.
+첫번째 인자 : MySQL 객체를 핸들링 하는 변수
+두번째 인자 : "@right.jbnu.ac.kr"을 의미, 즉 들어갈 서버의 호스트명을 의미한다.
+세번째 인자 : "A201210927"은 서버에 들어갈 계정 이름을 의미한다.
+네번째 인자 : "q1234"는 서버에 들어갈 계정의 비밀번호를 의미한다.
+다섯번째 인자 : "A201210927" 두번째 인자와 햇갈릴 수 있지만 설명하자면, 다섯번째 인자는 "A201210927"의 이름을 가진 데이터베이스를 연결한다는 의미이다.
+               해당 서버가 데이터베이스 이름을 이렇게 제공해주었고, 이것밖에 사용할 수 없기 때문에 우리는 이 안에서 테이블들을 관리해야한다.
+여덟번째 인자 : CLIENT_MULTI_STATEMENTS는 기본 MySQL에서는 쿼리문을 단일로밖에 제공을 하지 않기때문에, 복수의 쿼리문을 입력하고 싶을때 쓰는 명령문이다. */
 bool connectToDatabase()
 {
-	int rc = sqlite3_open(DB_PATH, &Db);
-
-    if(rc != SQLITE_OK)
-    {
-	    fprintf(stderr,"Cannot open database : %s\n", sqlite3_errmsg(Db));
-	    sqlite3_close(Db);
-
-	    return false;
-	}
-
-	if(IsItUser == true)
-    {                           
-		excuteQuery("CREATE TABLE IF NOT EXISTS User (studentID TEXT, hashedPassword TEXT, userName TEXT, role INT, registerDate INT);");
-    }
-	if(IsItLecture == true)
-    {                           
-		excuteQuery("CREATE TABLE IF NOT EXISTS Lecture (lectureID INT, professorID INT, lectureName TEXT, createDate INT );");
-    }
-    if(IsItAttendanceCheckLog == true)
-    {
-		excuteQuery("CREATE TABLE IF NOT EXISTS AttendanceCheckLog (lectureID INT, studentID INT, IP TEXT, quizAnswer TEXT, checkDate INT );");
-	}
-	if(IsItChatLog == true)
+	if(mysql_real_connect(Connect,"right.jbnu.ac.kr", "A201210927","q1234","A201210927",0,NULL,CLIENT_MULTI_STATEMENTS) == NULL)
 	{
-		excuteQuery("CREATE TABLE IF NOT EXISTS ChatLog (lectureID INT, userName TEXT, message TEXT, date INT );");
+		handlingError(Connect);
+		return false;
 	}
+
+	return true;
 }
 
+//데이터베이스를 종료시키는 함수.
+//핸들링함수가 존재시에 종료시키고 true를 반환한다.
 bool closeDatabase()
 {
-	int returnCode = sqlite3_close(Db);
-
-	if(returnCode != SQLITE_OK)
+	if(Connect == NULL)
 	{
-		printf("데이터베이스를 정상적으로 닫지 못했습니다. 치명적 오류발생!\n");
-    	return false;
+		fprintf(stderr,"mysql_close() 함수 실패\n");
+		return false;
 	}
+	mysql_close(Connect);
+
+	return true;
 }
-//11월26일 수정시작! 10:51a.m
-//새로추가함 11/24 15:25 p.m
-bool registerUser(User *user)                                  // DB에 새로운 사용자 정보 저장
+
+/*4개의 테이블들을 만드는 함수, 성공하면 0 그렇지않으면 다른숫자를 발생시킨다.
+Lecture의 table의 갯수와 구조체의 갯수가 다르다. 이유는 memberList배열을 데이터베이스에서는 뺐기 때문인데, memberList라는 table을 따로 만들어서
+그 안에서 어떤 강의를 듣는지 구별 할 수 있는 값을 넣고 필요할때 그 값에 해당되는 모든 user를 출력하면 되기 때문이다.*/
+bool makeTables()
 {
-    char strSQL[500];                                       // 명령문을 담을 임시 char 배열
-    char strRole[10];
-    char strRegisterDate[50];
+	excuteQuery("CREATE TABLE IF NOT EXISTS User(studentID INT, hashedPassword TEXT, userName TEXT, role INT, registerDate TEXT)");
+	excuteQuery("CREATE TABLE IF NOT EXISTS Lecture(lectureID INT, professorID INT, lectureName TEXT, createDate TEXT)");
+	excuteQuery("CREATE TABLE IF NOT EXISTS AttendanceCheckLog(lectureID INT, studentID INT, IP TEXT, quizAnswer TEXT, checkDate TEXT)");
+	excuteQuery("CREATE TABLE IF NOT EXISTS ChatLog(lectureID INT, userName TEXT, message TEXT, date TEXT)");
+
+	return true;
+}
+
+/* 각 데이터베이스를 초기화 하는 함수이다.
+DROP 명령문으로 기존 테이블을 삭제하고, 다시 새롭게 만드는 방식으로 초기화를 진행했다.
+여기서 주의할것은 한번에 쿼리문을 작성하지 않았고 2개의 executeQuery()함수문으로 초기화를 시켰는데
+이는 MySQL에서의 동기화문제로 컴파일이 안되었기 때문에 어쩔 수 없이 이렇게 구현 할 수 밖에 없었다.*/
+bool clearUser()
+{
+	excuteQuery("DROP TABLE User");
+	excuteQuery("CREATE TABLE IF NOT EXISTS User(studentID INT, hashedPassword TEXT, userName TEXT, role INT, registerDate TEXT)");
+
+	return true;
+}
+bool clearLecture()
+{	
+	excuteQuery("DROP TABLE Lecture");
+	excuteQuery("CREATE TABLE IF NOT EXISTS Lecture(lectureID INT, professorID INT, lectureName TEXT, createDate TEXT)");
+
+	return true;
+}
+bool clearAttendanceCheckLog()
+{
+	excuteQuery("DROP TABLE AttendanceCheckLog");
+	excuteQuery("CREATE TABLE IF NOT EXISTS AttendanceCheckLog(lectureID INT, studentID INT, IP TEXT, quizAnswer TEXT, checkDate TEXT)");
+
+	return true;
+}
 
 
-    sprintf(strRole, "%d", user->role);                         //정수형을 char형으로 변환
-    sprintf(strRegisterDate, "%d", user->registerDate);         //정수형을 char형으로 변환
+//User구조체를 참조해서 데이터베이스 User 테이블에 값을 저장하는 함수.
+bool registerUser(User *user)
+{
+	char strSQL[500];                                       //명령문을 담을 임시 char 배열
+    char strRole[2];										//Role형 role을 쿼리문에 입력하기위해 임시로 char형으로 바꿀 변수.
+    char strRegisterDate[50];								//time_t형 registerDate를 char형으로 바꿔 데이터베이스에 저장시킬 변수.
+
+	time(&user->registerDate);
+//	strRegisterDate = ctime(&user->registerDate);
+	printf("현재시간 %s\n",strRegisterDate);
+
+    sprintf(strRole, "%d", user->role);                         //쿼리문에는 char형으로 입력해야 하므로 int형 변수 role을 char형으로 변환 
+
  
+	// INSERT INTO User VALUES(201210927,'password','장진성',2,'2018년 11월 29일 0시 45분'); 이와같은 형식으로 저장할 예정.
     strcpy(strSQL,"INSERT INTO User VALUES(");
-
-	strcat(strSQL,"'");
     strcat(strSQL,user->studentID);	
-	strcat(strSQL,"'");
 	strcat(strSQL,", ");
 
 	strcat(strSQL,"'");
@@ -90,22 +135,18 @@ bool registerUser(User *user)                                  // DB에 새로�
 	strcat(strSQL,"'");
 	strcat(strSQL,user->userName);
 	strcat(strSQL,"'");
-   	 strcat(strSQL,", ");
-
-	//strcat(strSQL,"'");    
+   	strcat(strSQL,", ");
+  
     strcat(strSQL,strRole);
-	//strcat(strSQL,"'");
 	strcat(strSQL,", ");
     
-	//strcat(strSQL,"'");
-   	strcat(strSQL,strRegisterDate);
-	//strcat(strSQL,"'");
-	strcat(strSQL,");");
+	strcat(strSQL,"'");
+   	strcat(strSQL,ctime(&user->registerDate));
+	strcat(strSQL,"');");
 
-	printf("%s\n",strSQL);                                                              //테스트용, 잘 출력되나
+	printf("%s\n",strSQL);										//테스트용, 잘 출력되나
 
-	//char *ssql = "INSERT INTO User VALUES('201210927','ZZZZZZ','장진성',2,3);";
-
+/*
 	int rc = sqlite3_exec(dbUser,strSQL,0,0,&err_msg);                                  //지금 여기서 막힘. 18:42 p.m 11/24
 	if(rc != SQLITE_OK)
 	{
@@ -118,21 +159,42 @@ bool registerUser(User *user)                                  // DB에 새로�
 	}
 
     return true;
+*/
 }
 
-int main(void)                                                                           //테스트용.
+int main(void)
 {
+	//테스트 약간 지저분 할 수 있음
 	User u1;
+//	u1.studentID = 201210927;
 	strcpy(u1.userName, "장진성");
    	strcpy(u1.studentID, "201210927");
     strcpy(u1.hashedPassword, "abcdefg");
-   	u1.role = 1;
-   	u1.registerDate = 1234;
+   	u1.role = Student;
+//   	u1.registerDate;
 
-	isItUser = true;
-	createNewDatabase();
-	registerUser(&u1);
-	closeDatabase();
 
+
+
+
+	if(initializeDatabase())
+		printf("초기화 성공!\n");
+	if(connectToDatabase())
+		printf("연결 성공!\n");
+	if(makeTables())
+		printf("테이블 생성 완료!\n");
+	if(clearUser())
+		printf("User 테이블 초기화 완료!\n");
+	if(clearLecture())
+		printf("Lecture 테이블 초기화 완료!\n");
+	if(clearAttendanceCheckLog())
+		printf("AttendanceCheckLog 테이블 초기화 완료!\n");
+
+
+
+
+	if(closeDatabase())
+		printf("종료 성공!\n");
+	printf("good bye.\n");
 	return 0;
 }
