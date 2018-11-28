@@ -1,9 +1,7 @@
-#include "dataPack.h"
-#include "interface.h"
-
 #include <errno.h>
 #include <fcntl.h>
 #include <locale.h>
+#include <ncurses.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,9 +18,47 @@
 #define SERVER_PORT 10743
 #define SERVER_ADDRESS "192.168.98.128"
 #define MAX_CLIENT 64
-#define MAX_LECTURE 16
 
-void initializeGlobalVariable();
+enum Command
+{
+    NONE,
+
+    USER_LOGIN_REQUEST, USER_LOGOUT_REQUEST,
+    LECTURE_LIST_REQUEST, LECTURE_CREATE_REQUEST, LECTURE_REMOVE_REQUEST,
+    LECTURE_ENTER_REQUEST, LECTURE_LEAVE_REQUEST, LECTURE_REGISTER_REQUEST, LECTURE_DEREGISTER_REQUEST,
+    ATTENDANCE_START_REQUEST, ATTNEDANCE_STOP_REQUEST, ATTENDANCE_RESULT_REQUEST, ATTENDANCE_CHECK_REQUEST,
+    CHAT_ENTER_REQUEST, CHAT_LEAVE_REQUEST, CHAT_USER_LIST_REQUEST, CHAT_SEND_MESSAGE_REQUEST,
+    
+    LOGIN_RESPONSE, LOGOUT_RESPONSE,
+    LECTURE_LIST_RESPONSE, LECTURE_CREATE_RESPONSE, LECTURE_REMOVE_RESPONSE,
+    LECTURE_ENTER_RESPONSE, LECTURE_LEAVE_RESPONSE, LECTURE_REGISTER_RESPONSE, LECTURE_DEREGISTER_RESPONSE,
+    ATTENDANCE_START_RESPONSE, ATTNEDANCE_STOP_RESPONSE, ATTENDANCE_RESULT_RESPONSE, ATTENDANCE_CHECK_RESPONSE,
+    CHAT_ENTER_RESPONSE, CHAT_LEAVE_RESPONSE, CHAT_USER_LIST_RESPONSE, CHAT_SEND_MESSAGE_RESPONSE,
+};
+
+enum UserRole
+{
+    None, Admin, Student, Professor
+};
+
+typedef struct UserInfo_t
+{
+    enum UserRole role;
+    char userName[16];
+    char studentID[16];
+} UserInfo;
+
+typedef struct DataPack_t
+{
+    enum Command command;
+    bool result;
+    char data1[128];
+    char data2[128];
+    char data3[128];
+    char data4[128];
+    char message[508 - sizeof(UserInfo)];
+    UserInfo userInfo;
+} DataPack;
 
 // 서버
 bool initiateServer();
@@ -34,27 +70,12 @@ bool sendDataPack(int receiver, DataPack *dataPack);
 // 통신
 bool decomposeDataPack(int sender, DataPack *dataPack);
 
-void userLogin(int receiver, char *studentID, char *password);
-void userLogout(int receiver, UserInfo *userInfo);
-
-void lectureList(int receiver);
-void lectureCreate(int receiver, char *lectureName);
-void lectureRemove(int receiver, char *lectureName);
-void lectureEnter(int receiver, char *lectureName);
-void lectureLeave(int receiver, char *lectureName);
-void lectureRegister(int receiver, char *lectureName);
-void lectureDeregister(int receiver, char *lectureName);
-
-bool addUserToList(User *user);
-bool removeUserFromList(char *studentID);
-bool getUserFromList(User *user, char *studentID);
-
-bool loadLectureList();
-
-int userCount;
-int lectureCount;
-User userList[MAX_CLIENT];
-Lecture lectureList[MAX_LECTURE];
+// 인터페이스
+void initiateInterface();
+void drawDefaultLayout();
+void drawBorder(WINDOW *window, char *windowName);
+void printMessage(WINDOW *window, const char *format, ...);
+void onClose();
 
 int ServerSocket;
 time_t ServerUpTime;
@@ -62,36 +83,20 @@ time_t ServerUpTime;
 int Fdmax;
 fd_set Master, Reader;
 
-extern WINDOW *MessageWindow, *MessageWindowBorder;
-extern WINDOW *CommandWindow, *CommandWindowBorder;
-extern WINDOW *InputWindow, *InputWindowBorder;
+WINDOW *MessageWindow, *MessageWindowBorder;
+WINDOW *CommandWindow, *CommandWindowBorder;
+WINDOW *InputWindow, *InputWindowBorder;
 
 int main()
 {
-    initializeGlobalVariable();
-
     atexit(onClose);
     initiateInterface();
-
     drawDefaultLayout();
 
     initiateServer();
-
     async();
     
     return 0;
-}
-
-// 전역 변수 초기화
-void initializeGlobalVariable()
-{
-    userCount = 0;
-    lectureCount = 0;
-
-    for (int index = 0; index < MAX_CLIENT; index++)
-        memset(&userList[index], 0, sizeof(User));
-    for (int index = 0; index < MAX_LECTURE; index++)
-        memset(&lectureList[index], 0, sizeof(Lecture));
 }
 
 // TCP/IP 소켓 서버 시작
@@ -245,166 +250,16 @@ void receiveData(int socket)
 // [반환] true: , false: 
 bool decomposeDataPack(int sender, DataPack *dataPack)
 {
-    printMessage(MessageWindow, "sender: '%d', command: '%d', data1: '%s', data2: '%s', message: '%s'\n",
-        sender, dataPack->command, dataPack->data1, dataPack->data2, dataPack->message);
+    printMessage(MessageWindow, "sender: '%d', command: '%d', result: '%d'\ndata1: '%s', data2: '%s'\ndata3: '%s', data4: '%s', message: '%s'\nrole: '%d', userName: '%s', studentID: '%s'", sender, dataPack->command, dataPack->result, dataPack->data1, dataPack->data2, dataPack->data3, dataPack->data4, dataPack->message, dataPack->userInfo.role, dataPack->userInfo.userName, dataPack->userInfo.studentID);
 
     switch(dataPack->command)
     {
-        case USER_LOGIN_REQUEST:
-            break;
-        case USER_LOGOUT_REQUEST:
-            break;
-        case LECTURE_LIST_REQUEST:
-            break;
-        case LECTURE_CREATE_REQUEST:
-            break;
-        case LECTURE_REMOVE_REQUEST:
-            break;
         case LECTURE_ENTER_REQUEST:
-            break;
-        case LECTURE_LEAVE_REQUEST:
-            break;
-        case LECTURE_REGISTER_REQUEST:
-            break;
-        case LECTURE_DEREGISTER_REQUEST:
-            break;
-        case ATTENDANCE_START_REQUEST:
-            break;
-        case ATTNEDANCE_STOP_REQUEST:
-            break;
-        case ATTNEDANCE_EXTEND_REQUEST:
-            break;
-        case ATTENDANCE_RESULT_REQUEST:
-            break;
-        case ATTENDANCE_CHECK_REQUEST:
-            break;
-        case CHAT_ENTER_REQUEST:
-            break;
-        case CHAT_LEAVE_REQUEST:
-            break;
-        case CHAT_USER_LIST_REQUEST:
-            break;
-        case CHAT_SEND_MESSAGE_REQUEST:
             break;
 
         default:
             break;
     }
-}
-
-void userLogin(int receiver, char *studentID, char *password)
-{
-    DataPack dataPack;
-    resetDataPack(&dataPack);
-
-    if (loginUser(studentID, password))
-    {
-        User user = loadUserByID(studentID);
-        addUserToList(&user);
-
-        dataPack.result = true;
-        dataPack.userInfo.role = user.role;
-        strncpy(dataPack.userInfo.userName, user.userName, sizeof(dataPack.userInfo.userName));
-        strncpy(dataPack.userInfo.studentID, user.studentID, sizeof(dataPack.userInfo.studentID));
-    }
-    else
-    {
-        dataPack.result = false;
-        strncpy(dataPack.message, "학번 또는 비밀번호가 틀립니다.");
-    }
-
-    sendDataPack(receiver, &dataPack);
-}
-
-void userLogout(int receiver, UserInfo *userInfo)
-{
-    DataPack dataPack;
-    resetDataPack(&dataPack);
-
-    if (removeUserFromList(userInfo->studentID))
-    {
-        dataPack.result = true;
-    }
-    else
-    {
-        dataPack.result = false;
-        strncpy(dataPack.message, "이미 로그아웃 하였습니다.");
-    }
-
-    sendDataPack(receiver, &dataPack);
-}
-
-void lectureList(int receiver)
-{
-    DataPack dataPack;
-    resetDataPack(&dataPack);
-
-    for (int index = 0; index < lectureCount; index++)
-    {
-
-    }
-
-    sendDataPack(receiver, &dataPack);
-}
-
-void lectureCreate(int receiver, char *lectureName)
-{
-    DataPack dataPack;
-    resetDataPack(&dataPack);
-
-    if ((lectureCount + 1) = MAX_LECTURE)
-    {
-        dataPack.result = false;
-        strncpy(dataPack.message, "더 이상 강의를 개설할 수 없습니다.");
-    }
-    else
-    {
-        Lecture newLecture;
-        newLecture = 
-        lectureList[lectureCount]
-    }
-
-    sendDataPack(receiver, &dataPack);
-}
-
-void lectureRemove(int receiver, char *lectureName)
-{
-    DataPack dataPack;
-    resetDataPack(&dataPack);
-
-    sendDataPack(receiver, &dataPack);
-}
-
-void lectureEnter(int receiver, char *lectureName)
-{
-    DataPack dataPack;
-    resetDataPack(&dataPack);
-
-    sendDataPack(receiver, &dataPack);
-}
-
-void lectureLeave(int receiver, char *lectureName)
-{
-    DataPack dataPack;
-    resetDataPack(&dataPack);
-
-    sendDataPack(receiver, &dataPack);
-}
-
-void lectureRegister(int receiver, char *lectureName)
-{
-    DataPack dataPack;
-    resetDataPack(&dataPack);
-
-    sendDataPack(receiver, &dataPack);
-}
-
-void lectureDeregister(int receiver, char *lectureName)
-{
-    DataPack dataPack;
-    resetDataPack(&dataPack);
-
-    sendDataPack(receiver, &dataPack);
 }
 
 // 클라이언트에게 DataPack을 전송
@@ -415,61 +270,94 @@ bool sendDataPack(int receiver, DataPack *dataPack)
     return false;
 }
 
-// UserList에 새로운 User를 추가
-// [매개변수] user: 리스트에 추가 할 User구조체
-// [반환] true: 리스트에 추가 성공, false: 리스트가 가득 참
-bool addUserToList(User *user)
+// ncurses라이브러리를 이용한 사용자 인터페이스 초기화
+void initiateInterface()
 {
-    if (userCount + 1 < MAX_CLIENT)
-    {
-        userList[userCount] = *user;
-        userCount++;
-        return true;
-    }
-
-    return false;
+    setlocale(LC_CTYPE, "ko_KR.utf-8");
+    initscr();
+    noecho();
+    curs_set(FALSE);
 }
 
-// UserList에서 studentID가 일치 하는 User 삭제
-// [매개변수] studentID: 삭제 할 User의 studentID
-// [반환] true: 리스트에서 삭제 됨, false: 리스트가 비어 있거나 studentID가 일치하는 User가 없음
-bool removeUserFromList(char *studentID)
+// 기본 레이아웃으로 윈도우 그리기
+void drawDefaultLayout()
 {
-    if (userCount < 1)
-        return false;
+    int parentX, parentY;
+    getmaxyx(stdscr, parentY, parentX);
 
-    for (int index = 0; index < userCount - 1; index++)
-    {
-        if (strcmp(userList[index].studentID, studentID) == 0)
-        {
-            userList[index] = userList[userCount];
-            memset(&userList[userCount], 0, sizeof(User));
-            userCount--;
-            return true;
-        }
-    }
+    int commandWindowBorderWidth = 20;
+    int userInputWindowBorderHeight = 4;
 
-    return false;
+    MessageWindow = newwin(parentY - userInputWindowBorderHeight - 2, parentX - commandWindowBorderWidth - 2, 1, 1);
+    MessageWindowBorder = newwin(parentY - userInputWindowBorderHeight, parentX - commandWindowBorderWidth, 0, 0);
+
+    CommandWindow = newwin(parentY - userInputWindowBorderHeight - 2, commandWindowBorderWidth - 2, 1, parentX - commandWindowBorderWidth + 1);
+    CommandWindowBorder = newwin(parentY - userInputWindowBorderHeight, commandWindowBorderWidth, 0, parentX - commandWindowBorderWidth);
+
+    InputWindow = newwin(userInputWindowBorderHeight - 2, parentX - 2, parentY - userInputWindowBorderHeight + 1, 1);
+    InputWindowBorder = newwin(userInputWindowBorderHeight, parentX, parentY - userInputWindowBorderHeight, 0);
+
+    scrollok(MessageWindow, TRUE);
+    scrollok(CommandWindow, TRUE);
+
+    drawBorder(MessageWindowBorder, "MESSAGE");
+    drawBorder(CommandWindowBorder, "COMMAND");
+    drawBorder(InputWindowBorder, "USER INPUT");
+    
+    wrefresh(MessageWindow);
+    wrefresh(CommandWindow);
+    wrefresh(InputWindow);
 }
 
-// UserList에서 studentID가 일치하는 User를 가져옴
-// [매개변수] user: 검색 결과를 받을 User포인터, studentID: 검색 할 User의 studentID
-// [반환] true: studentID가 일치하는 User가 있음, false: studentID가 일치하는 User가 없음
-bool getUserFromList(User *user, char *studentID)
+// 윈도우 테두리 그리기
+// [매개변수] window: 테두리를 그릴 윈도우, windowName: 상단에 보여줄 윈도우 이름
+void drawBorder(WINDOW *window, char *windowName)
 {
-    for (int index = 0; index < userCount; index++)
+    int x, y;
+    getmaxyx(window, y, x);
+
+    // 테두리 그리기
+    mvwprintw(window, 0, 0, "+"); 
+    mvwprintw(window, y - 1, 0, "+"); 
+    mvwprintw(window, 0, x - 1, "+"); 
+    mvwprintw(window, y - 1, x - 1, "+"); 
+    for (int i = 1; i < (y - 1); i++)
     {
-        if (strcmp(userList[index].studentID, studentID) == 0)
-        {
-            user = &userList[index];
-            return true;
-        }
+        mvwprintw(window, i, 0, "|"); 
+        mvwprintw(window, i, x - 1, "|"); 
+    }
+    for (int i = 1; i < (x - 1); i++)
+    {
+        mvwprintw(window, 0, i, "-"); 
+        mvwprintw(window, y - 1, i, "-"); 
     }
 
-    return false;
+    // 윈도우 이름 출력
+    mvwprintw(window, 0, 4, windowName); 
+
+    wrefresh(window);
 }
 
-bool loadLectureList()
+// 매개변수로 전달한 윈도우에 문자열 출력
+// [매개변수] window: 문자열을 출력할 윈도우, format: 문자열 출력 포맷
+void printMessage(WINDOW *window, const char *format, ...)
 {
-    return false;
+    va_list args;
+    va_start(args, format);
+    vwprintw(window, format, args);
+    va_end(args);
+    wrefresh(window);
+}
+
+// 프로그램 종료시 수행
+void onClose()
+{
+    // ncurses윈도우 종료
+    delwin(MessageWindow);
+    delwin(MessageWindowBorder);
+    delwin(CommandWindow);
+    delwin(CommandWindowBorder);
+    delwin(InputWindow);
+    delwin(InputWindowBorder);
+    endwin();
 }

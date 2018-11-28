@@ -42,5 +42,4 @@ typedef struct DataPack_t
     UserInfo userInfo;
 } DataPack;
 
-void resetDataPack(DataPack *dataPack);
 void buildDataPack(DataPack *targetDataPack, char *data1, char *data2, char *data3, char *data4, char *message);

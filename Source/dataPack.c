@@ -25,11 +25,6 @@ const char *CommandString[37] =
     "CHAT_ENTER_RESPONSE", "CHAT_LEAVE_RESPONSE", "CHAT_USER_LIST_RESPONSE", "CHAT_SEND_MESSAGE_RESPONSE",
 };
 
-void resetDataPack(DataPack *dataPack)
-{
-    memset(dataPack, 0, sizeof(DataPack));
-}
-
 void buildDataPack(DataPack *targetDataPack, char *data1, char *data2, char *data3, char *data4, char *message)
 {
     if (data1 != NULL)
