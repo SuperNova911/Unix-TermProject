@@ -12,7 +12,7 @@
 // 사용자 권한
 typedef enum
 {
-    None, Admin, Student, Professor         //None 0,Admin 1, Student 2, Professor 3
+    None = 0, Admin = 1, Student = 2, Professor = 3
 } Role;                                 
 
 // 사용자 정보 구조체
@@ -29,7 +29,8 @@ typedef struct User_t
 typedef struct Lecture_t
 {
     int lectureID;
-    int professorID[16];
+    int memberCount;
+    char professorID[16];
     char lectureName[128];
     char memeberList[LECTURE_MAX_MEMBER][16];
     time_t createDate;
@@ -39,7 +40,7 @@ typedef struct Lecture_t
 typedef struct AttendanceCheckLog_t
 {
     int lectureID;
-    int studentID[16];
+    char studentID[16];
     char IP[16];
     char quizAnswer[512];
     time_t checkDate;
@@ -81,13 +82,5 @@ bool clearAttendanceCheckLog();                                 // AttendanceChe
 ChatLog *loadChatLog(ChatLog chatLog[], int amount, int lectureID);       // DB에서 lectureID가 일치하는 채팅 기록 구조체 배열 반환
 bool saveChatLog(ChatLog *chatLog);                                       // DB에 채팅 기록 저장
 bool clearChatLog();
-
-//---추가---
-bool isItUser;                          //유저들의 데이터베이스인지 확인하는 변수
-bool isItLecture;                       //강의들의 데이터베이스인지 확인하는 변수.
-bool isItAttendanceCheckLog;            //출석체크 기록 데이터베이스인지 확인하는 변수.
-bool isItChatLog;                       //채팅 기록 데이터베이스인지 확인하는 변수.
-
-char *err_msg = 0;                      //에러메시지 변수.
 
 
