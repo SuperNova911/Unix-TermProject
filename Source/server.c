@@ -22,19 +22,21 @@
 #define MAX_CLIENT 64
 #define MAX_LECTURE 16
 
-typedef struct LectureInfo_t
-{
-    int onlineUserCount;
-    Lecture lecture;
-    OnlineUser onlineUser[MAX_LECTURE_MEMBER];
-} LectureInfo;
 
 typedef struct OnlineUser_t
 {
     int socket;
     int currentLectureID;
+    bool onChat;
     User user;
 } OnlineUser;
+
+typedef struct LectureInfo_t
+{
+    int onlineUserCount;
+    Lecture lecture;
+    OnlineUser *onlineUser[MAX_LECTURE_MEMBER];
+} LectureInfo;
 
 void initializeGlobalVariable();
 
@@ -64,7 +66,7 @@ void attendanceResult(int sender, UserInfo *userInfo);
 void attendanceCheck(int sender, char *HWID, char *answer, UserInfo *userInfo);
 void chatEnter(int sender, UserInfo *userInfo);
 void chatLeave(int sender, UserInfo *userInfo);
-void chatUserList(int sender);
+void chatUserList(int sender, UserInfo *userInfo);
 void chatSendMessage(int sender, char *message, UserInfo *userInfo);
 
 bool addOnlineUser(User *user, int socket);
@@ -330,13 +332,13 @@ bool decomposeDataPack(int sender, DataPack *dataPack)
             chatEnter(sender, &dataPack->userInfo);
             break;
         case CHAT_LEAVE_REQUEST:
-            chatEnter(sender, &dataPack->userInfo);
+            chatLeave(sender, &dataPack->userInfo);
             break;
         case CHAT_USER_LIST_REQUEST:
-            chatEnter(sender);
+            chatUserList(sender, &dataPack->userInfo);
             break;
         case CHAT_SEND_MESSAGE_REQUEST:
-            chatEnter(sender, dataPack->message, &dataPack->userInfo);
+            chatSendMessage(sender, dataPack->message, &dataPack->userInfo);
             break;
 
         default:
@@ -366,7 +368,7 @@ void userLogin(int sender, char *studentID, char *password)
         return;
     }
 
-    if (addOnlineUser(&user) == false)
+    if (addOnlineUser(&user, sender) == false)
     {
         setErrorMessage(&dataPack, "서버가 가득 찼습니다");
         sendDataPack(sender, &dataPack);
@@ -405,7 +407,7 @@ void lectureList(int sender)
 
     if (LectureCount == 0)
     {
-        setErrorMessage("개설된 강의가 없습니다");
+        setErrorMessage(&dataPack, "개설된 강의가 없습니다");
         sendDataPack(sender, &dataPack);
         return;
     }
@@ -427,7 +429,7 @@ void lectureCreate(int sender, char *lectureName, UserInfo *userInfo)
 
     if (hasPermission(userInfo) == false)
     {
-        setErrorMessage("강의를 개설할 권한이 없습니다");
+        setErrorMessage(&dataPack, "강의를 개설할 권한이 없습니다");
         sendDataPack(sender, &dataPack);
         return;
     }
@@ -440,7 +442,7 @@ void lectureCreate(int sender, char *lectureName, UserInfo *userInfo)
 
     if (addLecture(&newLecture) == false)
     {
-        setErrorMessage("더 이상 강의를 개설할 수 없습니다");
+        setErrorMessage(&dataPack, "더 이상 강의를 개설할 수 없습니다");
         sendDataPack(sender, &dataPack);
         return;
     }
@@ -448,7 +450,7 @@ void lectureCreate(int sender, char *lectureName, UserInfo *userInfo)
     if (createLecture(&newLecture) == false)
     {
         removeLectureByName(newLecture.lectureName);
-        setErrorMessage("강의를 개설하던 중 문제가 발생하였습니다");
+        setErrorMessage(&dataPack, "강의를 개설하던 중 문제가 발생하였습니다");
         sendDataPack(sender, &dataPack);
         return;
     }
@@ -465,14 +467,14 @@ void lectureRemove(int sender, char *lectureName, UserInfo *userInfo)
 
     if (hasPermission(userInfo) == false)
     {
-        setErrorMessage("강의를 삭제할 권한이 없습니다");
+        setErrorMessage(&dataPack, "강의를 삭제할 권한이 없습니다");
         sendDataPack(sender, &dataPack);
         return;
     }
 
     if (removeLectureByName(lectureName) == false)
     {
-        setErrorMessage("해당 이름이 일치하는 강의가 없습니다");
+        setErrorMessage(&dataPack, "해당 이름이 일치하는 강의가 없습니다");
         sendDataPack(sender, &dataPack);
         return;
     }
@@ -489,7 +491,7 @@ void lectureEnter(int sender, char *lectureName, UserInfo *userInfo)
 
     if (userEnterLecture(userInfo->studentID, lectureName) == false)
     {
-        setErrorMessage("해당 강의가 없거나 가득 찼습니다");
+        setErrorMessage(&dataPack, "해당 강의가 없거나 가득 찼습니다");
         sendDataPack(sender, &dataPack);
         return;
     }
@@ -506,7 +508,7 @@ void lectureLeave(int sender, char *lectureName, UserInfo *userInfo)
 
     if (userLeaveLecture(userInfo->studentID, lectureName) == false)
     {
-        setErrorMessage("해당 강의 정보가 잘못됐거나 이미 나갔습니다");
+        setErrorMessage(&dataPack, "해당 강의 정보가 잘못됐거나 이미 나갔습니다");
         sendDataPack(sender, &dataPack);
         return;
     }
@@ -524,7 +526,7 @@ void lectureRegister(int sender, char *lectureName, UserInfo *userInfo)
     LectureInfo *lectureInfo;
     if (findLectureInfoByName(lectureInfo, lectureName) == false)
     {
-        setErrorMessage("해당 이름이 일치하는 강의가 없습니다");
+        setErrorMessage(&dataPack, "해당 이름이 일치하는 강의가 없습니다");
         sendDataPack(sender, &dataPack);
         return;
     }
@@ -533,7 +535,7 @@ void lectureRegister(int sender, char *lectureName, UserInfo *userInfo)
     {
         if (strcmp(lectureInfo->lecture.memberList[index], userInfo->studentID) == 0)
         {
-            setErrorMessage("이미 가입한 강의 입니다");
+            setErrorMessage(&dataPack, "이미 가입한 강의 입니다");
             sendDataPack(sender, &dataPack);
             return;
         }
@@ -541,14 +543,14 @@ void lectureRegister(int sender, char *lectureName, UserInfo *userInfo)
 
     if ((lectureInfo->onlineUserCount + 1) == MAX_LECTURE_MEMBER)
     {
-        setErrorMessage("강의가 가득찼습니다");
+        setErrorMessage(&dataPack, "강의가 가득찼습니다");
         sendDataPack(sender, &dataPack);
         return;
     }
 
-    if (lecture_registerUser(lectureInfo->lectureID, userInfo->studentID) == false)
+    if (lecture_registerUser(lectureInfo->lecture.lectureID, userInfo->studentID) == false)
     {
-        setErrorMessage("가입 요청 중 문제가 발생하였습니다");
+        setErrorMessage(&dataPack, "가입 요청 중 문제가 발생하였습니다");
         sendDataPack(sender, &dataPack);
         return;
     }
@@ -556,12 +558,12 @@ void lectureRegister(int sender, char *lectureName, UserInfo *userInfo)
     OnlineUser *onlineUser;
     if (findOnlineUserByID(onlineUser, userInfo->studentID) == false)
     {
-        setErrorMessage("잘못된 사용자 정보입니다");
+        setErrorMessage(&dataPack, "잘못된 사용자 정보입니다");
         sendDataPack(sender, &dataPack);
         return;
     }
 
-    memcpy(lectureInfo->onlineUser[lectureInfo->onlineUserCount], onlineUser, sizeof(OnlineUser));
+    lectureInfo->onlineUser[lectureInfo->onlineUserCount] = onlineUser;
 
     dataPack.result = false;
     sendDataPack(sender, &dataPack);
@@ -576,7 +578,7 @@ void lectureDeregister(int sender, char *lectureName, UserInfo *userInfo)
     LectureInfo *lectureInfo;
     if (findLectureInfoByName(lectureInfo, lectureName) == false)
     {
-        setErrorMessage("해당 이름이 일치하는 강의가 없습니다");
+        setErrorMessage(&dataPack, "해당 이름이 일치하는 강의가 없습니다");
         sendDataPack(sender, &dataPack);
         return;
     }
@@ -595,7 +597,7 @@ void attendanceStart(int sender, char *duration, char *answer, char *quiz, UserI
 
     if (hasPermission(userInfo) == false)
     {
-        setErrorMessage("권한이 없습니다");
+        setErrorMessage(&dataPack, "권한이 없습니다");
         sendDataPack(sender, &dataPack);
         return;
     }
@@ -603,7 +605,7 @@ void attendanceStart(int sender, char *duration, char *answer, char *quiz, UserI
     OnlineUser *onlineUser;
     if (findOnlineUserByID(onlineUser, userInfo->studentID) == false)
     {
-        setErrorMessage("잘못된 사용자 정보입니다");
+        setErrorMessage(&dataPack, "잘못된 사용자 정보입니다");
         sendDataPack(sender, &dataPack);
         return;
     }
@@ -611,7 +613,7 @@ void attendanceStart(int sender, char *duration, char *answer, char *quiz, UserI
     LectureInfo *lectureInfo;
     if (findLectureInfoByID(lectureInfo, onlineUser->currentLectureID) == false)
     {
-        setErrorMessage("입장중인 강의가 없습니다");
+        setErrorMessage(&dataPack, "입장중인 강의가 없습니다");
         sendDataPack(sender, &dataPack);
         return;
     }
@@ -622,7 +624,6 @@ void attendanceStart(int sender, char *duration, char *answer, char *quiz, UserI
     timeData = localtime(&currentTime);
     timeData->tm_min += atoi(duration);
 
-    buildDataPack(&dataPack, duration, )
 
     for (int index = 0; index < lectureInfo->onlineUserCount; index++)
     {
@@ -674,11 +675,30 @@ void chatEnter(int sender, UserInfo *userInfo)
     resetDataPack(&dataPack);
     dataPack.command = CHAT_ENTER_RESPONSE;
 
-    for (int userIndex = 0; userIndex < UserCount)
+    OnlineUser *onlineUser;
+    if (findOnlineUserByID(onlineUser, userInfo->studentID) == false)
     {
+        setErrorMessage(&dataPack, "잘못된 사용자 정보입니다");
+        sendDataPack(sender, &dataPack);
+        return;
     }
 
-    dataPack.result = false;
+    if (onlineUser->currentLectureID == 0)
+    {
+        setErrorMessage(&dataPack, "강의실에 먼저 입장해야 합니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    if (onlineUser->onChat)
+    {
+        setErrorMessage(&dataPack, "이미 강의 대화에 있습니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    onlineUser->onChat = true;
+    dataPack.result = true;
     sendDataPack(sender, &dataPack);
 }
 void chatLeave(int sender, UserInfo *userInfo)
@@ -687,16 +707,63 @@ void chatLeave(int sender, UserInfo *userInfo)
     resetDataPack(&dataPack);
     dataPack.command = CHAT_LEAVE_RESPONSE;
 
-    dataPack.result = false;
+    OnlineUser *onlineUser;
+    if (findOnlineUserByID(onlineUser, userInfo->studentID) == false)
+    {
+        setErrorMessage(&dataPack, "잘못된 사용자 정보입니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    if (onlineUser->currentLectureID == 0)
+    {
+        setErrorMessage(&dataPack, "이미 강의실에서 나갔습니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    if (onlineUser->onChat == false)
+    {
+        setErrorMessage(&dataPack, "이미 강의 대화에서 나갔습니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    onlineUser->onChat = false;
+    dataPack.result = true;
     sendDataPack(sender, &dataPack);
 }
-void chatUserList(int sender)
+void chatUserList(int sender, UserInfo *userInfo)
 {
     DataPack dataPack;
     resetDataPack(&dataPack);
     dataPack.command = CHAT_USER_LIST_RESPONSE;
 
-    dataPack.result = false;
+    OnlineUser *onlineUser;
+    if (findOnlineUserByID(onlineUser, userInfo->studentID) == false)
+    {
+        setErrorMessage(&dataPack, "잘못된 사용자 정보입니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    LectureInfo *lectureInfo;
+    if (findLectureInfoByID(lectureInfo, onlineUser->currentLectureID) == false)
+    {
+        setErrorMessage(&dataPack, "강의 정보를 찾을 수 없습니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    for (int index = 0; index < lectureInfo->onlineUserCount; index++)
+    {
+        if (lectureInfo->onlineUser[index]->onChat)
+        {
+            sprintf(dataPack.message, "%s%s, ", dataPack.message, lectureInfo->onlineUser[index]->user.userName);
+        }
+    }
+
+    dataPack.result = true;
     sendDataPack(sender, &dataPack);
 }
 void chatSendMessage(int sender, char *message, UserInfo *userInfo)
@@ -705,8 +772,30 @@ void chatSendMessage(int sender, char *message, UserInfo *userInfo)
     resetDataPack(&dataPack);
     dataPack.command = CHAT_SEND_MESSAGE_RESPONSE;
 
-    dataPack.result = false;
-    sendDataPack(sender, &dataPack);
+    OnlineUser *onlineUser;
+    if (findOnlineUserByID(onlineUser, userInfo->studentID) == false)
+    {
+        setErrorMessage(&dataPack, "잘못된 사용자 정보입니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    LectureInfo *lectureInfo;
+    if (findLectureInfoByID(lectureInfo, onlineUser->currentLectureID) == false)
+    {
+        setErrorMessage(&dataPack, "강의 정보를 찾을 수 없습니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    for (int index = 0; index < lectureInfo->onlineUserCount; index++)
+    {
+        if (lectureInfo->onlineUser[index]->onChat)
+        {
+            dataPack.result = true;
+            sendDataPack(lectureInfo->onlineUser[index]->socket, &dataPack);
+        }
+    }
 }
 
 // 클라이언트에게 DataPack을 전송
@@ -797,7 +886,7 @@ bool removeLectureByName(char *lectureName)
 {
     for (int index = 0; index < LectureCount; index++)
     {
-        if (isSameLectureName(LectureInfoList[index], lectureName))
+        if (isSameLectureName(&LectureInfoList[index], lectureName))
         {
             memcpy(&LectureInfoList[index], &LectureInfoList[LectureCount], sizeof(LectureInfo));
             memset(&LectureInfoList[LectureCount], 0, sizeof(LectureInfo));
@@ -822,7 +911,7 @@ bool userEnterLecture(char *studentID, char *lectureName)
     if (findOnlineUserByID(onlineUser, studentID) == false)
         return false;
 
-    memcpy(lectureInfo->onlineUser[lectureInfo->onlineUserCount], onlineUser, sizeof(OnlineUser));
+    lectureInfo->onlineUser[lectureInfo->onlineUserCount] = onlineUser;
     lectureInfo->onlineUserCount++;
 
     onlineUser->currentLectureID = lectureInfo->lecture.lectureID;
@@ -842,10 +931,10 @@ bool userLeaveLecture(char *studentID, char *lectureName)
 
     for (int index = 0; index < lectureInfo->onlineUserCount; index++)
     {
-        if (isSameUserID(lectureInfo->onlineUser[index].user, studentID))
+        if (isSameUserID(&lectureInfo->onlineUser[index]->user, studentID))
         {
-            memcpy(lectureInfo->onlineUser[index], lectureInfo->onlineUser[lectureInfo->onlineUserCount], sizeof(OnlineUser));
-            memset(lectureInfo->onlineUser[lectureInfo->onlineUserCount], 0, sizeof(OnlineUser));
+            lectureInfo->onlineUser[index] = lectureInfo->onlineUser[lectureInfo->onlineUserCount];
+            // 초기화?
             lectureInfo->onlineUserCount--;
 
             onlineUser->currentLectureID = 0;
@@ -884,7 +973,7 @@ bool findLectureInfoByName(LectureInfo *foundLectureInfo, char *lectureName)
 {
     for (int index = 0; index < LectureCount; index++)
     {
-        if (isSameLectureName(LectureInfoList[index], lectureName))
+        if (isSameLectureName(&LectureInfoList[index], lectureName))
         {
             foundLectureInfo = &LectureInfoList[index];
             return true;
