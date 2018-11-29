@@ -50,3 +50,5 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+Source/.vscode/settings.json
+~$DataPack규칙.xlsx
