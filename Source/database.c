@@ -34,6 +34,19 @@ bool initializeDatabase()
 	return true;
 }
 
+/* //mysql_store_reuslt()함수는 결과셋을 가져오는 함수이다.
+//MYSQL_RES는 결과셋을 담는 구조체이다.
+bool useResultSet(MYSQL *Connect)
+{
+	result = mysql_store_reuslt(Connect);
+	if(result == NULL)
+	{
+		handlingError(Connect);
+	}
+
+	return true;
+} */
+
 /*database에 연결하는 함수
 mysql_real_connect라는 함수를 이용한다. 만약 이 함수가 NULL을 반환하게되면 예외처리 시키고 종료한다.
 첫번째 인자 : MySQL 객체를 핸들링 하는 변수
@@ -60,11 +73,10 @@ bool closeDatabase()
 {
 	if(Connect == NULL)
 	{
-		fprintf(stderr,"mysql_close() 함수 실패\n");
+		fprintf(stderr,"%s\n", mysql_error(Connect));
 		return false;
 	}
 	mysql_close(Connect);
-
 	return true;
 }
 
@@ -107,21 +119,26 @@ bool clearAttendanceCheckLog()
 	return true;
 }
 
-
 //User구조체를 참조해서 데이터베이스 User 테이블에 값을 저장하는 함수.
 bool registerUser(User *user)
 {
-	char strSQL[500];                                       //명령문을 담을 임시 char 배열
+	char strSQL[500];                                       //명령문을 담을 char 배열
     char strRole[2];										//Role형 role을 쿼리문에 입력하기위해 임시로 char형으로 바꿀 변수.
     char strRegisterDate[50];								//time_t형 registerDate를 char형으로 바꿔 데이터베이스에 저장시킬 변수.
 
-	time(&user->registerDate);
-//	strRegisterDate = ctime(&user->registerDate);
-	printf("현재시간 %s\n",strRegisterDate);
+	time(&user->registerDate);									
+	strcpy(strRegisterDate,ctime(&user->registerDate));			//ctime함수로 인해 변형된 문자열을 strRegisterDate에 복사해 저장시키고 있다.
+	sprintf(strRole, "%d", user->role);                         //쿼리문에는 char형으로 입력해야 하므로 int형 변수 role을 char형으로 변환 
 
-    sprintf(strRole, "%d", user->role);                         //쿼리문에는 char형으로 입력해야 하므로 int형 변수 role을 char형으로 변환 
+	for(int i=0; strRegisterDate[i] != '\0'; i++)				//ctime으로 변환된 문자열은 '\n'문자를 포함하고있다. 따라서 '\n'문자를 제거하기위한 알고리즘이다.
+	{
+		if(strRegisterDate[i] == '\n')
+		{
+			strRegisterDate[i] = '\0';
+			break;
+		}
+	}
 
- 
 	// INSERT INTO User VALUES(201210927,'password','장진성',2,'2018년 11월 29일 0시 45분'); 이와같은 형식으로 저장할 예정.
     strcpy(strSQL,"INSERT INTO User VALUES(");
     strcat(strSQL,user->studentID);	
@@ -141,41 +158,59 @@ bool registerUser(User *user)
 	strcat(strSQL,", ");
     
 	strcat(strSQL,"'");
-   	strcat(strSQL,ctime(&user->registerDate));
+   	strcat(strSQL,strRegisterDate);
 	strcat(strSQL,"');");
 
-	printf("%s\n",strSQL);										//테스트용, 잘 출력되나
+	excuteQuery(strSQL);
+	return true;
+}
 
-/*
-	int rc = sqlite3_exec(dbUser,strSQL,0,0,&err_msg);                                  //지금 여기서 막힘. 18:42 p.m 11/24
-	if(rc != SQLITE_OK)
+/*이 함수는 DB에서 studentID와 hashedPassword가 일치하는 사용자가 있는지 확인하는 함수이다.
+학번과 비밀번호를 받아서, User Table에 해당 학번과 비밀번호가 일치한지 확인 한 다음 둘다 일치하면 true를, 그렇지않으면 false를 반환한다.*/
+bool isLoginUser(char *studentID, char *hashedPassword)
+{
+	excuteQuery("SELECT * FROM User");					//User Table을 선택해야만 이 함수는 실행될 수 있기에, SELECT문으로 선택을 먼저했다.
+
+	MYSQL_RES *result = mysql_store_result(Connect);	//데이터베이스의 원소들을 다루기 위한 핸들링 함수 result;
+	if(result == NULL)
 	{
-		fprintf(stderr,"SQL error: %s\n", err_msg);
-
-		sqlite3_free(err_msg);
-		sqlite3_close(dbUser);
-
+		handlingError(Connect);
 		return false;
 	}
 
-    return true;
-*/
+	MYSQL_ROW row;												//row 핸들링 변수 row;
+	while( row= mysql_fetch_row(result)  )
+	{
+		int isItSameID = strcmp(studentID,row[0]);				//strcmp 함수를 통해, 두 문자가 같으면 0을 반환한다.
+		int isItSamePW = strcmp(hashedPassword,row[1]);
+		
+		if( (isItSameID==0) & (isItSamePW==0) )
+		{
+			printf("찾고자하는 ID와 PW가 일치하는 데이터가 이 테이블 안에 있습니다.\n");
+			return true;										//두개 다 같다면 true 반환
+		}
+	}
+
+	printf("찾고자하는 ID와 PW가 일치하는 데이터가 이 테이블 안에 없습니다.\n");
+	mysql_free_result(result);									//핸들링 변수 result를 닫는다.
+	return false;												//두개 다 같은것을 찾지못하면 false반환.
 }
 
 int main(void)
 {
 	//테스트 약간 지저분 할 수 있음
 	User u1;
-//	u1.studentID = 201210927;
 	strcpy(u1.userName, "장진성");
    	strcpy(u1.studentID, "201210927");
     strcpy(u1.hashedPassword, "abcdefg");
    	u1.role = Student;
-//   	u1.registerDate;
 
-
-
-
+	//테스트 약간 지저분 할 수 있음
+	User u2;
+	strcpy(u2.userName, "홍길동");
+   	strcpy(u2.studentID, "1234567");
+    strcpy(u2.hashedPassword, "abcabc");
+   	u2.role = Student;
 
 	if(initializeDatabase())
 		printf("초기화 성공!\n");
@@ -183,6 +218,7 @@ int main(void)
 		printf("연결 성공!\n");
 	if(makeTables())
 		printf("테이블 생성 완료!\n");
+		
 	if(clearUser())
 		printf("User 테이블 초기화 완료!\n");
 	if(clearLecture())
@@ -191,6 +227,21 @@ int main(void)
 		printf("AttendanceCheckLog 테이블 초기화 완료!\n");
 
 
+
+
+	if(registerUser(&u2))
+		printf("테이블에 데이터 등록 완료!\n");
+
+	if(registerUser(&u1))
+		printf("테이블에 데이터 등록 완료!\n");
+
+
+
+
+	if(isLoginUser("1234567","abcabc"))
+		printf("isLoginUser 함수 작동 정상!\n");
+	if(isLoginUser("201210927","abcdefg"))
+		printf("isLoginUser 함수 작동 정상!\n");
 
 
 	if(closeDatabase())
