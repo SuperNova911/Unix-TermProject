@@ -34,19 +34,6 @@ bool initializeDatabase()
 	return true;
 }
 
-/* //mysql_store_reuslt()함수는 결과셋을 가져오는 함수이다.
-//MYSQL_RES는 결과셋을 담는 구조체이다.
-bool useResultSet(MYSQL *Connect)
-{
-	result = mysql_store_reuslt(Connect);
-	if(result == NULL)
-	{
-		handlingError(Connect);
-	}
-
-	return true;
-} */
-
 /*database에 연결하는 함수
 mysql_real_connect라는 함수를 이용한다. 만약 이 함수가 NULL을 반환하게되면 예외처리 시키고 종료한다.
 첫번째 인자 : MySQL 객체를 핸들링 하는 변수
