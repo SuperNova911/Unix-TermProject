@@ -61,7 +61,7 @@ User *loadUser(User user[], int amount, int lectureID);     // DB에서 lectureI
 User loadUserByID(char *studentID);                         // DB에서 studentID가 일치하는 사용자 구조체 반환
 bool registerUser(User *user);                              // DB에 새로운 사용자 정보 저장+++
 bool removeUser(char *studentID);                           // DB에서 studentID가 일치하는 사용자 삭제
-bool isLoginUser(char *studentID, char *hashedPassword);    // DB에서 studentID와 hashedPassword가 일치하는 사용자가 있는지 확인
+bool isLoginUser(char *studentID, char *hashedPassword);    // DB에서 studentID와 hashedPassword가 일치하는 사용자가 있는지 확인+++
 bool clearUser();                                           // User 테이블 초기화+++
 
 Lecture *loadLecture(Lecture lecture[], int amount);            // DB에서 강의 구조체 배열 반환
@@ -78,11 +78,10 @@ bool clearAttendanceCheckLog();                                                 
 
 ChatLog *loadChatLog(ChatLog chatLog[], int amount, int lectureID);       // DB에서 lectureID가 일치하는 채팅 기록 구조체 배열 반환
 bool saveChatLog(ChatLog *chatLog);                                       // DB에 채팅 기록 저장
-bool clearChatLog();
+bool clearChatLog();                                                      // CahtLog 테이블 초기화+++
 
 // 11.28 추가
 MYSQL *Connect;                                                         //MySQL 구조체를 핸들링 할 변수+++
 bool handlingError(MYSQL *Connect);                                     //에러 발생시 실행되는 함수+++
 bool makeTables();                                                      //Database에 4개의 테이블을 만드는 함수+++
 bool excuteQuery(char *sql);                                            //쿼리문을 실행시키고 동시에 에러검사 까지하는 함수+++
-bool useResultSet(MYSQL *Connect);                                      //Database에 결과셋을 가져오는 함수.
