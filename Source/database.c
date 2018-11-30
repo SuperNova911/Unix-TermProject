@@ -83,7 +83,7 @@ bool makeTables()
 /* 각 데이터베이스를 초기화 하는 함수이다.
 DROP 명령문으로 기존 테이블을 삭제하고, 다시 새롭게 만드는 방식으로 초기화를 진행했다.
 여기서 주의할것은 한번에 쿼리문을 작성하지 않았고 2개의 executeQuery()함수문으로 초기화를 시켰는데
-이는 MySQL에서의 동기화문제로 컴파일이 안되었기 때문에 어쩔 수 없이 이렇게 구현 할 수 밖에 없었다.*/
+이는 MySQL에서의 동기화 문제로 컴파일이 안되었기 때문에 어쩔 수 없이 이렇게 구현 할 수 밖에 없었다.*/
 bool clearUser()
 {
 	excuteQuery("DROP TABLE User");
@@ -102,6 +102,13 @@ bool clearAttendanceCheckLog()
 {
 	excuteQuery("DROP TABLE AttendanceCheckLog");
 	excuteQuery("CREATE TABLE IF NOT EXISTS AttendanceCheckLog(lectureID INT, studentID INT, IP TEXT, quizAnswer TEXT, checkDate TEXT)");
+
+	return true;
+}
+bool clearChatLog()
+{
+	excuteQuery("DROP TABLE ChatLog");
+	excuteQuery("CREATE TABLE IF NOT EXISTS ChatLog(lectureID INT, userName TEXT, message TEXT, date TEXT)");
 
 	return true;
 }
@@ -171,10 +178,11 @@ bool isLoginUser(char *studentID, char *hashedPassword)
 		int isItSameID = strcmp(studentID,row[0]);				//strcmp 함수를 통해, 두 문자가 같으면 0을 반환한다.
 		int isItSamePW = strcmp(hashedPassword,row[1]);
 		
-		if( (isItSameID==0) & (isItSamePW==0) )
+		if( (isItSameID==0) & (isItSamePW==0) )					//두개 다 같다면 
 		{
 			printf("찾고자하는 ID와 PW가 일치하는 데이터가 이 테이블 안에 있습니다.\n");
-			return true;										//두개 다 같다면 true 반환
+			mysql_free_result(result);							//핸들링 변수 result를 닫는다.
+			return true;										//true 반환
 		}
 	}
 
@@ -183,22 +191,71 @@ bool isLoginUser(char *studentID, char *hashedPassword)
 	return false;												//두개 다 같은것을 찾지못하면 false반환.
 }
 
+//User 테이블에 studentID가 있으면 해당되는 행을 삭제하는 함수
+bool removeUser(char *studentID)
+{
+	char strSQL[200];										//쿼리문을 배열에 저장하기 위해서.
+	strcpy(strSQL,"DELETE FROM User WHERE studentID=");
+    strcat(strSQL,studentID);	
+
+	if(excuteQuery(strSQL))									//쿼리문을 돌리고 문제 없이 잘 작동되면 true 반환.
+		return true;
+}
+
+//Database에서 studentID가 일치하는 사용자 구조체 반환하는 함수
+//WHERE 조건문으로 하려고 했으나 계속 안되어서 어쩔수 없이 isLoginUser()함수와 비슷한 알고리즘으로 구현했다.
+User loadUserByID(char *studentID)
+{
+
+	excuteQuery("SELECT * FROM User");
+
+	User tempUser;										//return할 구조체를 임시로 생성
+	MYSQL_RES *result = mysql_store_result(Connect);	//데이터베이스의 원소들을 다루기 위한 핸들링 함수 result;
+	
+	if(result == NULL)
+	{
+		handlingError(Connect);
+		exit(0);
+	}
+		
+	MYSQL_ROW row;												//row 핸들링 변수 row;
+	while( row= mysql_fetch_row(result)  )
+	{		
+		int isItSameID = strcmp(studentID,row[0]);
+			
+		if(isItSameID==0)
+		{
+			strcpy(tempUser.studentID,row[0]);
+    		strcpy(tempUser.hashedPassword,row[1]);
+    		strcpy(tempUser.userName,row[2]);
+    		tempUser.role = atoi(row[3]);
+    		tempUser.registerDate = 0;							//일단 테스트용. time_t에 대해서 미숙하고 공부 아직 안함.
+
+			mysql_free_result(result);
+			return tempUser; 									//구조체를 반환한다.
+		}
+	}
+
+	printf("loadUserByID() 함수 실패!.\n");
+	exit(0);
+}
+
 int main(void)
 {
-	//테스트 약간 지저분 할 수 있음
-	User u1;
-	strcpy(u1.userName, "장진성");
-   	strcpy(u1.studentID, "201210927");
-    strcpy(u1.hashedPassword, "abcdefg");
-   	u1.role = Student;
+	//마지막에 꼭 main함수에 내가 만든 함수 하나씩만 넣어서 실행시켜보기! (논리적인 오류가 있는지 확인하기 위해)
+	//구조체에 임시로 데이터값 입력 테스트
+	User u[10];
+	strcpy(u[0].userName, "장진성");
+   	strcpy(u[0].studentID, "201210927");
+    strcpy(u[0].hashedPassword, "abcdefg");
+   	u[0].role = Student;
 
-	//테스트 약간 지저분 할 수 있음
-	User u2;
-	strcpy(u2.userName, "홍길동");
-   	strcpy(u2.studentID, "1234567");
-    strcpy(u2.hashedPassword, "abcabc");
-   	u2.role = Student;
+	strcpy(u[1].userName, "홍길동");
+   	strcpy(u[1].studentID, "1234567");
+    strcpy(u[1].hashedPassword, "abcabc");
+   	u[1].role = Student;
 
+	//데이터베이스 초기화 세팅 테스트
 	if(initializeDatabase())
 		printf("초기화 성공!\n");
 	if(connectToDatabase())
@@ -206,31 +263,41 @@ int main(void)
 	if(makeTables())
 		printf("테이블 생성 완료!\n");
 		
+	//테이블 리셋 테스트
 	if(clearUser())
 		printf("User 테이블 초기화 완료!\n");
 	if(clearLecture())
 		printf("Lecture 테이블 초기화 완료!\n");
 	if(clearAttendanceCheckLog())
 		printf("AttendanceCheckLog 테이블 초기화 완료!\n");
+	if(clearChatLog())
+		printf("ChatLog 테이블 초기화 완료!\n");
 
-
-
-
-	if(registerUser(&u2))
+	//등록 테스트
+	if(registerUser(&u[1]))
+		printf("테이블에 데이터 등록 완료!\n");
+	if(registerUser(&u[0]))
 		printf("테이블에 데이터 등록 완료!\n");
 
-	if(registerUser(&u1))
-		printf("테이블에 데이터 등록 완료!\n");
-
-
-
-
+	//isLoginUser 함수 테스트, ID PW로 일치하는지 확인
 	if(isLoginUser("1234567","abcabc"))
 		printf("isLoginUser 함수 작동 정상!\n");
 	if(isLoginUser("201210927","abcdefg"))
 		printf("isLoginUser 함수 작동 정상!\n");
 
+	//removeUser 함수 테스트, 삭제 잘 되는지 확인
+	if(removeUser("1234567"))
+		printf("removeUser 함수 작동 정상!\n");
 
+	//loadUserByID 함수 테스트, 반환 잘 되는지 확인
+	printf("%s\n", loadUserByID("201210927").studentID);
+	printf("%s\n", loadUserByID("201210927").hashedPassword);
+	printf("%s\n", loadUserByID("201210927").userName);
+	printf("%d\n", loadUserByID("201210927").role);
+	//결과: 테스트 성공
+
+
+	//데이터베이스 종료 테스트
 	if(closeDatabase())
 		printf("종료 성공!\n");
 	printf("good bye.\n");
