@@ -1,5 +1,8 @@
 #include "database.h"
 
+MYSQL *Connect;                                                         //MySQL 구조체를 핸들링 할 전역 변수+++
+
+
 //에러가 발생하게되면 에러메시지를 띄우고 MYSQL 구조체함수 핸들링을 그만하게한다.
 bool handlingError(MYSQL *Connect)
 {
