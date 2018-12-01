@@ -282,21 +282,40 @@ bool lecture_deregisterUser(int lectureID, char *studentID)
     {        
         if (strcmp(strLectureID,row[0])==0)
         {
-            sprintf(query, "DELETE FROM `LectureMember` WHERE `lectureID` = '%d' AND `studentID` = '%s'",lectureID, studentID);
-            
-            if(strcmp(studentID,row[1])!=0)
+            if( strcmp(studentID,row[1]) !=0)
             {
                 printf("해당 강의에 일치하는 이름(학번)이 없어 삭제할 수 없습니다. 다시한번 확인해주십시오.\n");
                 return false;
             }
 
+            sprintf(query, "DELETE FROM `LectureMember` WHERE `lectureID` = '%d' AND `studentID` = '%s'",lectureID, studentID);
+            
             executeQuery(query);
             return true;
         }
+
     }
     printf("lecture_deregisterUser() 함수 실패!.\n");
     return false;
-}   
+}
+
+bool saveAttendanceCheckLog(AttendanceCheckLog *checkLog)
+{
+    char query[1024];
+    sprintf(query, "REPLACE INTO `AttendanceCheckLog` (`lectureID`, `studentID`, `IP`, `quizAnswer`, `checkDate`) VALUES ('%d', '%s', '%s', '%s', '%s')",
+        checkLog->lectureID, checkLog->studentID, checkLog->IP, checkLog->quizAnswer, ctime(&checkLog->checkDate));
+    
+    return executeQuery(query);
+}
+
+bool saveChatLog(ChatLog *chatLog)
+{
+    char query[1024];
+    sprintf(query, "REPLACE INTO `ChatLog` (`lectureID`, `userName`, `message`, `date`) VALUES ('%d', %s', '%s', '%s')",
+        chatLog->lectureID, chatLog->userName, chatLog->message, ctime(&chatLog->date));
+    
+    return executeQuery(query);
+}
 
 //에러가 발생하게되면 에러메시지를 띄운다
 void handlingError()
@@ -385,6 +404,8 @@ void stringToTime(time_t *result, char *timeString)
 }
 */
 
+// Database에 출석체크 기록 저장
+
 int main(void)
 {
     //마지막에 꼭 main함수에 내가 만든 함수 하나씩만 넣어서 실행시켜보기! (논리적인 오류가 있는지 확인하기 위해)
@@ -410,6 +431,13 @@ int main(void)
     strncpy(lec[0].memberList[1], "201210927", sizeof(lec[0].memberList[1]));
     strncpy(lec[0].memberList[2], "199823455", sizeof(lec[0].memberList[2]));
     strncpy(lec[0].memberList[3], "200212345", sizeof(lec[0].memberList[3]));
+
+    //AttendanceCheckLog 구조체 테스트
+    AttendanceCheckLog cl[5];
+    cl[0].lectureID = lec[0].lectureID;
+    strcpy(cl[0].studentID,lec[0].memberList[0]);
+    strcpy(cl[0].IP,"111.111.111.111");
+    strcpy(cl[0].quizAnswer,"사자"); 
 
     //데이터베이스 초기화 세팅 테스트
     if (initializeDatabase())
@@ -446,6 +474,10 @@ int main(void)
     /*//Lecture 레코드 삭제 테스트
     if(removeLecture(1))
 	printf("removeLecture() 함수 성공!\n");	//테스트 성공함. 삭제는 되니까 테스트 조금 더 해보려고 일부로 주석처리시켰음*/
+
+
+    if(saveAttendanceCheckLog(&cl[0]))
+        printf("saveAttendanceCheckLog()함수 작동 정상!\n");
 
     //isLoginUser 함수 테스트, ID PW로 일치하는지 확인
     if (isLoginUser("1234567","abcabc"))

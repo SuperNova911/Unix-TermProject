@@ -37,8 +37,8 @@ typedef struct Lecture_t
 // 출석체크 기록 구조체
 typedef struct AttendanceCheckLog_t
 {
-    int lectureID;
-    int studentID[16];
+    int lectureID; 
+    char studentID[16];
     char IP[16];
     char quizAnswer[512];
     time_t checkDate;
@@ -72,11 +72,11 @@ bool lecture_deregisterUser(int lectureID, char *studentID);    // DB에서 lect
 void clearLecture();                                            // Lecture 테이블 초기화+++
 
 AttendanceCheckLog *loadAttendanceCheckLog(AttendanceCheckLog checkLog[], int amount, int lectureID);   // DB에서 lectureID가 일치하는 출석체크 기록 구조체 배열 반환
-bool saveAttendanceCheckLog(AttendanceCheckLog checkLog);                                               // DB에 출석체크 기록 저장
+bool saveAttendanceCheckLog(AttendanceCheckLog *checkLog);                                               // DB에 출석체크 기록 저장+++
 void clearAttendanceCheckLog();                                                                         // AttendanceCheckLog 테이블 초기화+++
 
 ChatLog *loadChatLog(ChatLog chatLog[], int amount, int lectureID);       // DB에서 lectureID가 일치하는 채팅 기록 구조체 배열 반환
-bool saveChatLog(ChatLog *chatLog);                                       // DB에 채팅 기록 저장
+bool saveChatLog(ChatLog *chatLog);                                       // DB에 채팅 기록 저장+++
 void clearChatLog();                                                      // CahtLog 테이블 초기화+++
 
 // 11.28 추가
