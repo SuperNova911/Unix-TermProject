@@ -168,6 +168,12 @@ void clearChatLog()
     executeQuery("DELETE FROM ChatLog");
 }
 
+Lecture loadLectureByID(int lectureID)
+{
+
+}
+
+
 bool createLecture(Lecture *lecture)
 {
     //구조체의 변수 중 memberList[LECTURE_MAX_MEMBER][16]는 query문에 삽입하지 않았고 saveLectureMemberList()함수에 대신 저장했다.  createDate는 %ld말고 일단 %s로 놓았음.
@@ -247,7 +253,7 @@ bool lecture_deregisterUser(int lectureID, char *studentID)
             
             if(strcmp(studentID,row[1])!=0)
             {
-                printf("해당 강의에 일치하는 이름(학번)이 없습니다. 다시한번 확인해주십시오.\n");
+                printf("해당 강의에 일치하는 이름(학번)이 없어 삭제할 수 없습니다. 다시한번 확인해주십시오.\n");
                 return false;
             }
 
