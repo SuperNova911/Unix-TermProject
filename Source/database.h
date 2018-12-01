@@ -30,7 +30,7 @@ typedef struct Lecture_t
     char lectureName[128];
     char professorID[16];
     int memberCount;
-    char memeberList[LECTURE_MAX_MEMBER][16];
+    char memberList[LECTURE_MAX_MEMBER][16];
     time_t createDate;
 } Lecture;
 
@@ -85,3 +85,9 @@ void clearChatLog();                                                      // Cah
 void handlingError();                                     //에러 발생시 실행되는 함수+++
 void createTable();                                                      //Database에 4개의 테이블을 만드는 함수+++
 bool executeQuery(char *query); //쿼리문을 실행시키고 동시에 에러검사 까지하는 함수+++
+
+// by Dopa
+void saveLectureMemberList(Lecture *lecture);
+bool loadLectureMemberList(Lecture *lecture);
+void timeToString(char *result, int size, time_t *time);
+void stringToTime(time_t *result, char *timeString);

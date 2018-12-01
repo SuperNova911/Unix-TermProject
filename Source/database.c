@@ -144,7 +144,7 @@ User loadUserByID(char *studentID)
     if (result == NULL)
     {
         handlingError();
-        return NULL;
+        return tempUser;
     }
         
     MYSQL_ROW row;                                                //row 핸들링 변수 row;
@@ -164,7 +164,7 @@ User loadUserByID(char *studentID)
     }
 
     printf("loadUserByID() 함수 실패!.\n");
-    return NULL;
+    return tempUser;
 }
 
 //에러가 발생하게되면 에러메시지를 띄운다
@@ -178,8 +178,9 @@ Lecture의 table의 갯수와 구조체의 갯수가 다르다. 이유는 member
 그 안에서 어떤 강의를 듣는지 구별 할 수 있는 값을 넣고 필요할때 그 값에 해당되는 모든 user를 출력하면 되기 때문이다.*/
 void createTable()
 {
-    executeQuery("CREATE TABLE IF NOT EXISTS `Test` (`studentID` VARCHAR(16) NOT NULL, `hashedPassword` VARCHAR(64) NOT NULL, `userName` VARCHAR(16) NOT NULL, `role` INT NOT NULL, `registerDate` VARCHAR(64) NOT NULL, PRIMARY KEY (`studentID`))");
+    executeQuery("CREATE TABLE IF NOT EXISTS `User` (`studentID` VARCHAR(16) NOT NULL, `hashedPassword` VARCHAR(64) NOT NULL, `userName` VARCHAR(16) NOT NULL, `role` INT NOT NULL, `registerDate` VARCHAR(64) NOT NULL, PRIMARY KEY (`studentID`))");
     executeQuery("CREATE TABLE IF NOT EXISTS `Lecture` (`lectureID` INT NOT NULL, `lectureName` VARCHAR(64) NOT NULL, `professorID` VARCHAR(16) NOT NULL, `memberCount` INT NOT NULL, `createDate` VARCHAR(64) NOT NULL, PRIMARY KEY (`lectureID`))");
+	executeQuery("CREATE TABLE IF NOT EXISTS `LectureMember` (`lectureID` INT NOT NULL, `studentID` VARCHAR(16) NOT NULL)");
     executeQuery("CREATE TABLE IF NOT EXISTS `AttendanceCheckLog` (`lectureID` INT NOT NULL, `studentID` VARCHAR(16) NOT NULL, `IP` VARCHAR(16) NOT NULL, `quizAnswer` VARCHAR(512) NOT NULL, `checkDate` VARCHAR(64) NOT NULL, PRIMARY KEY (`lectureID`))");
     executeQuery("CREATE TABLE IF NOT EXISTS `ChatLog` (`lectureID` INT NOT NULL, `userName` VARCHAR(16) NOT NULL, `message` VARCHAR(512) NOT NULL, `date` VARCHAR(64) NOT NULL, PRIMARY KEY (`lectureID`))");
 }
@@ -196,66 +197,68 @@ bool executeQuery(char *sql)
     return true;
 }
 
+// 강의 멤버 목록을 LectureMember테이블에 저장
+// [매개변수] lecture: 멤버 목록을 저장 할 Lecture 포인터
+void saveLectureMemberList(Lecture *lecture)
+{
+	char query[512];
+	for (int index = 0; index < lecture->memberCount; index++)
+	{
+		sprintf(query, "REPLACE INTO `LectureMember` (`lectureID`, `studentID`) VALUES ('%d', '%s')",
+			lecture->lectureID, lecture->memberList[index]);
+        executeQuery(query);
+	}
+}
+
+// 강의 멤버 목록을 LectureMember테이블에서 불러옴
+// [매개변수] lecture: 멤버 목록을 불러올 Lecture 포인터
+bool loadLectureMemberList(Lecture *lecture)
+{
+	char query[512];
+    sprintf(query, "SELECT * FROM `LectureMember` WHERE lectureID = '%d'", lecture->lectureID);
+    executeQuery(query);
+
+    MYSQL_RES *result;
+    result = mysql_store_result(Connection);
+    if (result == NULL)
+    {
+        handlingError();
+        return false;
+    }
+
+    MYSQL_ROW row;
+    for (int index = 0; row = mysql_fetch_row(result); index++)
+    {
+        strncpy(lecture->memberList[index], row[1], sizeof(lecture->memberList[index]));
+        lecture->memberCount++;
+    }
+
+    return true;
+}
+
+// time_t 자료형을 문자열로 변환
+// [매개변수] result: 변환된 문자열을 저장 할 문자열 포인터, size: 문자열 크기, time: 변환 할 time_t 자료형
+void timeToString(char *result, int size, time_t *time)
+{
+    strftime(result, size, "%Y:%m:%d:%H:%M:%S", localtime(time));
+}
+
+// 문자열을 time_t 자료형으로 변환
+// [매개변수] result: 변환된 time_t 자료형을 저장 할 time_t 포인터, timeString: 변환 할 문자열
+void stringToTime(time_t *result, char *timeString)
+{
+    struct tm tm;
+    strptime(timeString, "%Y:%m:%d:%H:%M:%S", &tm);
+    *result = mktime(&tm);
+}
+
 int main(void)
 {
-    //마지막에 꼭 main함수에 내가 만든 함수 하나씩만 넣어서 실행시켜보기! (논리적인 오류가 있는지 확인하기 위해)
-    //구조체에 임시로 데이터값 입력 테스트
-    User u[10];
-    strcpy(u[0].userName, "장진성");
-       strcpy(u[0].studentID, "201210927");
-    strcpy(u[0].hashedPassword, "abcdefg");
-       u[0].role = Student;
-
-    strcpy(u[1].userName, "홍길동");
-       strcpy(u[1].studentID, "1234567");
-    strcpy(u[1].hashedPassword, "abcabc");
-       u[1].role = Student;
-
-    //데이터베이스 초기화 세팅 테스트
-    if (initializeDatabase())
-        printf("초기화 성공!\n");
-    if (connectToDatabase())
-        printf("연결 성공!\n");
-    if (createTable())
-        printf("테이블 생성 완료!\n");
-        
-    //테이블 리셋 테스트
-    if (clearUser())
-        printf("User 테이블 초기화 완료!\n");
-    if (clearLecture())
-        printf("Lecture 테이블 초기화 완료!\n");
-    if (clearAttendanceCheckLog())
-        printf("AttendanceCheckLog 테이블 초기화 완료!\n");
-    if (clearChatLog())
-        printf("ChatLog 테이블 초기화 완료!\n");
-
-    //등록 테스트
-    if (registerUser(&u[1]))
-        printf("테이블에 데이터 등록 완료!\n");
-    if (registerUser(&u[0]))
-        printf("테이블에 데이터 등록 완료!\n");
-
-    //isLoginUser 함수 테스트, ID PW로 일치하는지 확인
-    if (isLoginUser("1234567","abcabc"))
-        printf("isLoginUser 함수 작동 정상!\n");
-    if (isLoginUser("201210927","abcdefg"))
-        printf("isLoginUser 함수 작동 정상!\n");
-
-    //removeUser 함수 테스트, 삭제 잘 되는지 확인
-    if (removeUser("1234567"))
-        printf("removeUser 함수 작동 정상!\n");
-
-    //loadUserByID 함수 테스트, 반환 잘 되는지 확인
-    printf("%s\n", loadUserByID("201210927").studentID);
-    printf("%s\n", loadUserByID("201210927").hashedPassword);
-    printf("%s\n", loadUserByID("201210927").userName);
-    printf("%d\n", loadUserByID("201210927").role);
-    //결과: 테스트 성공
+	initializeDatabase();
+	connectToDatabase();
+	createTable();
 
 
-    //데이터베이스 종료 테스트
-    if (closeDatabase())
-        printf("종료 성공!\n");
-    printf("good bye.\n");
+	closeDatabase();
     return 0;
 }
