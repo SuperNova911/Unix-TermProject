@@ -222,9 +222,42 @@ bool lecture_registerUser(int lectureID, char *studentID)
 // DB에서 lectureID가 일치하는 강의의 memberList에 studentID삭제
 bool lecture_deregisterUser(int lectureID, char *studentID)
 {
+    char query[512];
+    char strLectureID[5];                           //strcmp 함수를 사용하기위해서. 즉 int형을 char로 변환시켜서, 실제로 row[0]에 저장되어있는 lectureID값과 비교하기 위한변수
 
-}
+    sprintf(strLectureID,"%d",lectureID);
 
+
+    sprintf(query, "SELECT * FROM `Lecture` WHERE lectureID = '%d'", lectureID);
+    executeQuery(query);
+
+    MYSQL_RES *result = mysql_store_result(Connection);    //데이터베이스의 원소들을 다루기 위한 핸들링 함수 result;
+    if (result == NULL)
+    {
+        handlingError();
+        return false;
+    }
+
+    MYSQL_ROW row;                                                //row 핸들링 변수 row;
+    while (row = mysql_fetch_row(result))
+    {        
+        if (strcmp(strLectureID,row[0])==0)
+        {
+            sprintf(query, "DELETE FROM `LectureMember` WHERE `lectureID` = '%d' AND `studentID` = '%s'",lectureID, studentID);
+            
+            if(strcmp(studentID,row[1])!=0)
+            {
+                printf("해당 강의에 일치하는 이름(학번)이 없습니다. 다시한번 확인해주십시오.\n");
+                return false;
+            }
+
+            executeQuery(query);
+            return true;
+        }
+    }
+    printf("lecture_deregisterUser() 함수 실패!.\n");
+    return false;
+}   
 
 //에러가 발생하게되면 에러메시지를 띄운다
 void handlingError()
@@ -366,16 +399,14 @@ int main(void)
     if(createLecture(&lec[0]))
         printf("createLecture() 함수 성공!\n");	//테스트 성공함.
 
-
     if(lecture_registerUser(1, "55123345"))
         printf("lecture_registerUser()함수 성공\n");    //테스트 성공함.
+    if(lecture_deregisterUser(1,"55123345"))
+        printf("lecture_deregisterUser()함수 성공\n");  //테스트 성공함.
         
-    /*
-    //Lecture 레코드 삭제 테스트
+    /*//Lecture 레코드 삭제 테스트
     if(removeLecture(1))
-	printf("removeLecture() 함수 성공!\n");	//테스트 성공함.
-    */
-
+	printf("removeLecture() 함수 성공!\n");	//테스트 성공함. */
 
     //isLoginUser 함수 테스트, ID PW로 일치하는지 확인
     if (isLoginUser("1234567","abcabc"))
@@ -393,7 +424,6 @@ int main(void)
     printf("%s\n", loadUserByID("201210927").userName);
     printf("%d\n", loadUserByID("201210927").role);
     //결과: 테스트 성공
-
 
     //데이터베이스 종료 테스트
     if (closeDatabase())
