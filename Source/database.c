@@ -1,6 +1,7 @@
 #include "database.h"
 
-MYSQL *Connection;                                                         //MySQL 구조체를 핸들링 할 전역 변수+++
+MYSQL *Connection;                                                         //MySQL 구조체를 핸들링 할 전역 변수
+int NumberOfLecture;                                                       //강의 번호를 사용할 전역 변수
 
 //MySQL 서버를 핸들링할 객체를 메모리에 할당하고 초기화 하는 함수.
 //NULL 반환시 예외처리 시키고 종료한다.
@@ -254,11 +255,91 @@ void stringToTime(time_t *result, char *timeString)
 
 int main(void)
 {
-	initializeDatabase();
-	connectToDatabase();
+    //마지막에 꼭 main함수에 내가 만든 함수 하나씩만 넣어서 실행시켜보기! (논리적인 오류가 있는지 확인하기 위해)
+    //구조체에 임시로 데이터값 입력 테스트
+    User u[10];
+    strcpy(u[0].userName, "장진성");
+    strcpy(u[0].studentID, "201210927");
+    strcpy(u[0].hashedPassword, "abcdefg");
+    u[0].role = Student;
+
+    strcpy(u[1].userName, "홍길동");
+    strcpy(u[1].studentID, "1234567");
+    strcpy(u[1].hashedPassword, "abcabc");
+    u[1].role = Student;
+
+    //Lecture 구조체 테스트
+    Lecture lec[10];
+    lec[0].lectureID = ++NumberOfLecture;
+    strcpy(lec[0].lectureName, "유닉스");
+    strcpy(lec[0].professorID, "550123");
+    lec[0].memberList={    "장진성",
+                            "김수환",
+                            "홍길동",
+                            "이순신",
+                            "유관순",
+                            "김구",
+                            "강감찬",
+                            "무지개"    };
+
+
+    //데이터베이스 초기화 세팅 테스트
+    if (initializeDatabase())
+        printf("초기화 성공!\n");
+    if (connectToDatabase())
+        printf("연결 성공!\n");
+
+    //테이블 생성 테스트
 	createTable();
+    printf("테이블 생성 완료!\n");
+        
+    //테이블 리셋 테스트
+    clearUser();
+    clearLecture();
+    clearAttendanceCheckLog();
+    clearChatLog();
+    printf("모든 테이블 초기화 완료!\n");
+
+    //등록 테스트
+    if (registerUser(&u[1]))
+        printf("테이블에 데이터 등록 완료!\n");
+    if (registerUser(&u[0]))
+        printf("테이블에 데이터 등록 완료!\n");
+
+    //isLoginUser 함수 테스트, ID PW로 일치하는지 확인
+    if (isLoginUser("1234567","abcabc"))
+        printf("isLoginUser 함수 작동 정상!\n");
+    if (isLoginUser("201210927","abcdefg"))
+        printf("isLoginUser 함수 작동 정상!\n");
+
+    //removeUser 함수 테스트, 삭제 잘 되는지 확인
+    if (removeUser("1234567"))
+        printf("removeUser 함수 작동 정상!\n");
+
+    //loadUserByID 함수 테스트, 반환 잘 되는지 확인
+    printf("%s\n", loadUserByID("201210927").studentID);
+    printf("%s\n", loadUserByID("201210927").hashedPassword);
+    printf("%s\n", loadUserByID("201210927").userName);
+    printf("%d\n", loadUserByID("201210927").role);
+    //결과: 테스트 성공
 
 
-	closeDatabase();
+    //데이터베이스 종료 테스트
+    if (closeDatabase())
+        printf("종료 성공!\n");
+    printf("good bye.\n");
     return 0;
+}
+
+bool createLecture(Lecture *lecture)
+{
+    //구조체의 변수 중 memberList[LECTURE_MAX_MEMBER][16]는 query문에 삽입하지 않았다.
+    
+    char query[512];
+    sprintf(query,"REPLACE INTO `Lecture` (`lectureID`, `lectureName`, `professiorID`, `memberCount`, `createDate`) VALUES ('%d', '%s', '%s', '%d', '%s')",
+        lecture->lectureID, lecture->lectureName, lecture->professorID, lecture->memberCount, ctime(&lecture_deregisterUser->createDate));
+    executeQuery(query);
+
+    "CREATE TABLE IF NOT EXISTS `MemberList`(`lectureID` INT NOT NULL, `memberName` VARCHAR(64) NOT NULL)"
+
 }
