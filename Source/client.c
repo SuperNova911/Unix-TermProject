@@ -21,7 +21,7 @@
 
 enum ClientStatus
 {
-    Default, Login, LectureBrowser, Lobby, Chat
+    Default, Login, LectureBrowser, Lobby, Chat, Attendance
 } CurrentClientStatus;
 
 struct LoginInfo_t
@@ -51,12 +51,15 @@ void sendSampleDataPack();
 void getUserInput();
 void setInputGuide(char *inputGuide);
 void receiveUserCommand();
-void receiveArgument();
 
 void updateLayoutByStatus();
 void updateCommandByStatus();
 void updateInputByStatus();
 void changeClientStatus(enum ClientStatus status);
+
+bool receiveArgumentComplete();
+void resetArgument();
+void setArgumentGuide(char *guide1, char *guide2, char *guide3, char *guide4, char *guide5);
 
 extern const char *UserRoleString[4];
 extern const char *CommandString[37];
@@ -75,11 +78,14 @@ int ServerSocket;
 int Fdmax;
 fd_set Master, Reader;
 
-char UserInputGuide[256];
+char UserInputGuide[64];
 char UserInputBuffer[256];
 
 enum Command CurrentRequest;
-char Arguments[4][128];
+int TargetArgument, CurrentArgument;
+bool ReceiveArgument;
+char ArgumentGuide[5][64];
+char Arguments[5][256];
 
 int main()
 {
@@ -125,9 +131,17 @@ void initializeGlobalVariable()
 
     memset(UserInputGuide, 0, sizeof(UserInputGuide));
     memset(UserInputBuffer, 0, sizeof(UserInputBuffer));
-    for (int index = 0; index < 4; index++)
-        memset(Arguments[index], 0, sizeof(char) * 128);
 
+    TargetArgument = 0;
+    CurrentArgument = 0;
+    ReceiveArgument = false;
+
+    const int ARGS_NUM = 5;
+    for (int index = 0; index < ARGS_NUM; index++)
+    {
+        memset(Arguments[index], 0, sizeof(Arguments[index]));
+        memset(ArgumentGuide[index], 0, sizeof(ArgumentGuide[index]));
+    }
 }
 
 // TCP/IP 소켓 서버와 연결
@@ -260,7 +274,7 @@ bool composeDataPack(enum Command command)
     switch (dataPack.command)
     {
         case USER_LOGIN_REQUEST:
-            buildDataPack(&dataPack, LoginInfo.studentID, LoginInfo.password, NULL, NULL, NULL);
+            buildDataPack(&dataPack, Arguments[0], Arguments[1], NULL, NULL, NULL);
             // memset(&LoginInfo, 0, sizeof(struct LoginInfo_t));   디버깅
             break;
         
@@ -279,7 +293,7 @@ bool composeDataPack(enum Command command)
             break;
         
         case LECTURE_ENTER_REQUEST:
-            buildDataPack(&dataPack, "MyCustomClass", NULL, NULL, NULL, NULL);
+            buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, NULL);
             // buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, NULL);
             break;
         
@@ -292,11 +306,11 @@ bool composeDataPack(enum Command command)
             break;
         
         case LECTURE_DEREGISTER_REQUEST:
-            buildDataPack(&dataPack, CurrentLectureInfo.lectureName, NULL, NULL, NULL, NULL);
+            buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, NULL);
             break;
 
         case ATTENDANCE_START_REQUEST:
-            buildDataPack(&dataPack, Arguments[0], Arguments[1], NULL, NULL, UserInputBuffer);
+            buildDataPack(&dataPack, Arguments[0], Arguments[2], NULL, NULL, Arguments[1]);
             break;
         
         case ATTNEDANCE_STOP_REQUEST:
@@ -599,10 +613,26 @@ void receiveUserCommand()
     if (strlen(UserInputBuffer) < 1)
         return;
 
+    if (ReceiveArgument)
+    {
+        strncpy(Arguments[CurrentArgument], UserInputBuffer, sizeof(Arguments[CurrentArgument]));
+        CurrentArgument++;
+
+        if (receiveArgumentComplete())
+        {
+            composeDataPack(CurrentRequest);
+            resetArgument();
+        }
+        return;
+    }
+
     switch (CurrentClientStatus)
     {
         case Login:
-            composeDataPack(USER_LOGIN_REQUEST);
+            setArgumentGuide("학번을 입력하세요", "비밀번호를 입력하세요", NULL, NULL, NULL);
+            CurrentRequest = USER_LOGIN_REQUEST;
+            ReceiveArgument = true;
+            TargetArgument = 2;
             break;
 
         case LectureBrowser:
@@ -612,13 +642,48 @@ void receiveUserCommand()
                     composeDataPack(LECTURE_LIST_REQUEST);
                     break;
                 case 2:
-                    composeDataPack(LECTURE_ENTER_REQUEST);
+                    setArgumentGuide("입장할 강의 이름을 입력하세요", NULL, NULL, NULL, NULL);
+                    CurrentRequest = LECTURE_ENTER_REQUEST;
+                    ReceiveArgument = true;
+                    TargetArgument = 1;
+                    break;
+                case 3:
+                    if (CurrentUserInfo.role == Student)
+                    {
+                        setArgumentGuide("가입할 강의 이름을 입력하세요", NULL, NULL, NULL, NULL);
+                        CurrentRequest = LECTURE_REGISTER_REQUEST;
+                        ReceiveArgument = true;
+                        TargetArgument = 1;
+                    }
+                    else
+                    {
+                        setArgumentGuide("개설할 강의 이름을 입력하세요", NULL, NULL, NULL, NULL);
+                        CurrentRequest = LECTURE_CREATE_REQUEST;
+                        ReceiveArgument = true;
+                        TargetArgument = 1;
+                    }
+                    break;
+                case 4:
+                    if (CurrentUserInfo.role == Student)
+                    {
+                        setArgumentGuide("탈퇴할 강의 이름을 입력하세요", NULL, NULL, NULL, NULL);
+                        CurrentRequest = LECTURE_DEREGISTER_REQUEST;
+                        ReceiveArgument = true;
+                        TargetArgument = 1;
+                    }
+                    else
+                    {
+                        setArgumentGuide("삭제할 강의 이름을 입력하세요", NULL, NULL, NULL, NULL);
+                        CurrentRequest = LECTURE_REMOVE_REQUEST;
+                        ReceiveArgument = true;
+                        TargetArgument = 1;
+                    }
                     break;
                 case 9:
                     composeDataPack(USER_LOGOUT_REQUEST);
                     break;
                 case 0:
-                    //exitPrograme();
+                    //exitProgram();
                     break;
                 default:
                     printMessage(MessageWindow, "잘못된 명령어 입력: '%s'\n", UserInputBuffer);
@@ -630,10 +695,23 @@ void receiveUserCommand()
             switch (atoi(UserInputBuffer))
             {
                 case 1:
-                    // composeDataPack(LECTURE_NOTICE_REQUEST);
+                    if (CurrentUserInfo.role == Student)
+                    {
+                        // composeDataPack(LECTURE_NOTICE_REQUEST);
+                    }
+                    else
+                    {
+                        setArgumentGuide("등록할 공지사항을 입력하세요", NULL, NULL, NULL, NULL);
+                        // CurrentRequest = LECTURE_NOTICE_SET_REQUEST;
+                        ReceiveArgument = true;
+                        TargetArgument = 1;
+                    }
                     break;
                 case 2:
-                    composeDataPack(ATTENDANCE_CHECK_REQUEST);
+                    if (CurrentUserInfo.role == Student)
+                        composeDataPack(ATTENDANCE_CHECK_REQUEST);
+                    else
+                        changeClientStatus(Attendance);
                     break;
                 case 3:
                     // quizRequest(QUIZ_REQUEST);
@@ -641,7 +719,7 @@ void receiveUserCommand()
                 case 4:
                     composeDataPack(CHAT_ENTER_REQUEST);
                     break;
-                case 5:
+                case 8:
                     composeDataPack(LECTURE_LEAVE_REQUEST);
                     break;
                 case 9:
@@ -678,29 +756,43 @@ void receiveUserCommand()
             }
             break;
 
+        case Attendance:
+            switch (atoi(UserInputBuffer))
+            {
+                case 1:
+                    setArgumentGuide("출석 체크를 진행할 시간(분)", "퀴즈 내용을 입력하세요", "퀴즈 정답을 입력하세요", NULL, NULL);
+                    CurrentRequest = ATTENDANCE_START_REQUEST;
+                    ReceiveArgument = true;
+                    TargetArgument = 3;
+                    break;
+                case 2:
+                    composeDataPack(ATTNEDANCE_STOP_REQUEST);
+                    break;
+                case 3:
+                    setArgumentGuide("출석 체크를 연장할 시간을 입력하세요", NULL, NULL, NULL, NULL);
+                    CurrentRequest = ATTNEDANCE_EXTEND_REQUEST;
+                    ReceiveArgument = true;
+                    TargetArgument = 1;
+                    break;
+                case 4:
+                    composeDataPack(ATTENDANCE_RESULT_REQUEST);
+                    break;
+                case 8:
+                    changeClientStatus(Lobby);
+                    break;
+                case 9:
+                    composeDataPack(USER_LOGOUT_REQUEST);
+                    break;
+                case 0:
+                    //exitPrograme();
+                    break;
+                default:
+                    printMessage(MessageWindow, "잘못된 명령어 입력: '%s'\n", UserInputBuffer);
+                    break;
+            }
+
         default:
             printMessage(MessageWindow, "Invaild client status\n");
-            break;
-    }
-}
-
-void receiveArgument()
-{
-    switch (CurrentRequest)
-    {
-        case USER_LOGIN_REQUEST:
-            if (strlen(Arguments[0]) == 0)
-            {
-                setInputGuide("학번을 입력하세요");
-
-            }
-            else if (strlen(Arguments[1]) == 0)
-            {
-                setInputGuide("비밀번호를 입력하세요");
-
-            }
-
-        default:
             break;
     }
 }
@@ -722,6 +814,9 @@ void updateLayoutByStatus()
         case Chat:
             drawLectureLayout();
             break;
+        case Attendance:
+            drawLectureLayout();
+            break;
         default:
             drawDefaultLayout();
             break;
@@ -731,21 +826,62 @@ void updateLayoutByStatus()
 // CommandWindow의 명령어 목록을 ClientStatus에 따라 업데이트
 void updateCommandByStatus()
 {
-    switch (CurrentClientStatus)
+    switch (CurrentUserInfo.role)
     {
-        case Login:
-            break;
-
-        case LectureBrowser:
-            updateCommand("1: 강의 목록 보기\n2: 강의 입장\n\n\n\n\n\n\n9: 로그아웃\n0: 프로그램 종료");
+        case Admin:
             break;
         
-        case Lobby:
-            updateCommand("1. 공지사항 보기\n2. 출석 체크\n3. 미니 퀴즈\n4. 강의 대화 입장\n5. 강의실 나가기\n\n\n\n9: 로그아웃\n0: 프로그램 종료");
+        case Student:
+            switch (CurrentClientStatus)
+            {
+                case Login:
+                    break;
+
+                case LectureBrowser:
+                    updateCommand("1: 강의 목록 보기\n2: 강의 입장\n3. 강의 가입\n4. 강의 탈퇴\n\n\n\n\n9: 로그아웃\n0: 프로그램 종료");
+                    break;
+                        
+                case Lobby:
+                    updateCommand("1. 공지사항 보기\n2. 출석 체크\n3. 미니 퀴즈\n4. 강의 대화 입장\n\n\n\n8. 강의실 나가기\n9: 로그아웃\n0: 프로그램 종료");
+                    break;
+                                    
+                case Chat:
+                    updateCommand("!quit: 대화 나가기\n!user: 현재 사용자");
+                    break;
+
+                case Attendance:
+                    break;
+
+                default:
+                    break;
+            }
             break;
-            
-        case Chat:
-            updateCommand("!quit: 대화 나가기\n!user: 현재 사용자");
+        
+        case Professor:
+            switch (CurrentClientStatus)
+            {
+                case Login:
+                    break;
+
+                case LectureBrowser:
+                    updateCommand("1: 강의 목록 보기\n2: 강의 입장\n3. 강의 개설\n4.강의 삭제\n\n\n\n\n9: 로그아웃\n0: 프로그램 종료");
+                    break;
+                        
+                case Lobby:
+                    updateCommand("1. 공지사항 등록\n2. 출석 체크\n3. 미니 퀴즈\n4. 강의 대화 입장\n\n\n\n8. 강의실 나가기\n9: 로그아웃\n0: 프로그램 종료");
+                    break;
+                                    
+                case Chat:
+                    updateCommand("!quit: 대화 나가기\n!user: 현재 사용자");
+                    break;
+                
+                case Attendance:
+                    updateCommand("1. 출석 체크 시작\n2. 출석 체크 종료\n3. 시간 연장\n4. 결과 보기\n\n\n\n8. 뒤로 가기\n9: 로그아웃\n0: 프로그램 종료");
+                    break;
+
+                default:
+                    break;
+            }
             break;
 
         default:
@@ -755,6 +891,12 @@ void updateCommandByStatus()
 
 void updateInputByStatus()
 {
+    if (ReceiveArgument)
+    {
+        updateInput(ArgumentGuide[CurrentArgument], UserInputBuffer);
+        return;
+    }
+
     switch (CurrentClientStatus)
     {
         case Login:
@@ -771,6 +913,10 @@ void updateInputByStatus()
 
         case Chat:
             strncpy(UserInputGuide, "메시지를 입력하세요", sizeof(UserInputGuide));
+            break;
+
+        case Attendance:
+            strncpy(UserInputGuide, "명령어를 입력하세요", sizeof(UserInputGuide));
             break;
     
         default:
@@ -808,8 +954,45 @@ void changeClientStatus(enum ClientStatus status)
             updateNotice("도파 압도 도파고");
             updateEvent(false, true);
             break;
-        
+
+        case Attendance:
+            break;
+
         default:
             break;
     }
+}
+
+bool receiveArgumentComplete()
+{
+    return (ReceiveArgument && CurrentArgument == TargetArgument) ? true : false;
+}
+
+void resetArgument()
+{
+    const int ARGS_NUM = 5;
+    for (int index = 0; index < ARGS_NUM; index++)
+    {
+        memset(Arguments[index], 0, sizeof(Arguments[index]));
+        memset(ArgumentGuide[index], 0, sizeof(ArgumentGuide[index]));
+    }
+    
+    CurrentRequest = NONE;
+    CurrentArgument = 0;
+    TargetArgument = 0;
+    ReceiveArgument = false;
+}
+
+void setArgumentGuide(char *guide1, char *guide2, char *guide3, char *guide4, char *guide5)
+{
+    if (guide1 != NULL)
+        strncpy(ArgumentGuide[0], guide1, sizeof(ArgumentGuide[0]));
+    if (guide2 != NULL)
+        strncpy(ArgumentGuide[1], guide2, sizeof(ArgumentGuide[1]));
+    if (guide3 != NULL)
+        strncpy(ArgumentGuide[2], guide3, sizeof(ArgumentGuide[2]));
+    if (guide4 != NULL)
+        strncpy(ArgumentGuide[3], guide4, sizeof(ArgumentGuide[3]));
+    if (guide5 != NULL)
+        strncpy(ArgumentGuide[4], guide5, sizeof(ArgumentGuide[4]));
 }
