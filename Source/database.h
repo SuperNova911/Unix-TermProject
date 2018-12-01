@@ -66,7 +66,7 @@ void clearUser();                                           // User 테이블 �
 Lecture *loadLecture(Lecture lecture[], int amount);            // DB에서 강의 구조체 배열 반환
 Lecture loadLectureByID(int lectureID);                         // DB에서 lectureID가 일치하는 강의 정보 구조체 반환
 bool createLecture(Lecture *lecture);                           // DB에 새로운 강의 정보 저장+++
-bool removeLecture(int lectureID);                              // DB에서 lectureID가 일치하는 강의 삭제
+bool removeLecture(int lectureID);                              // DB에서 lectureID가 일치하는 강의 삭제+++
 bool lecture_registerUser(int lectureID, char *studentID);      // DB에서 lectureID가 일치하는 강의의 memberList에 studentID추가
 bool lecture_deregisterUser(int lectureID, char *studentID);    // DB에서 lectureID가 일치하는 강의의 memberList에 studentID삭제
 void clearLecture();                                            // Lecture 테이블 초기화+++

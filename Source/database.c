@@ -178,25 +178,51 @@ bool createLecture(Lecture *lecture)
     return executeQuery(query);
 }
 
-//"CREATE TABLE IF NOT EXISTS `Lecture` 
-//(`lectureID` INT NOT NULL, `lectureName` VARCHAR(64) NOT NULL, `professorID` VARCHAR(16) NOT NULL, `memberCount` INT NOT NULL, `createDate` BIGINT NOT NULL, PRIMARY KEY (`lectureID`))"
-/*
-bool registerUser(User *user)
-{
-    char query[512];
-    sprintf(query, "REPLACE INTO `User` (`studentID`, `hashedPassword`, `userName`, `role`, `registerDate`) VALUES ('%s', '%s', '%s', '%d', '%s')",
-        user->studentID, user->hashedPassword, user->userName, user->role, ctime(&user->registerDate));
-    
-    return executeQuery(query);
-}
-*/
-
 bool removeLecture(int lectureID)
 {
     char query[512];
     sprintf(query, "DELETE FROM `Lecture` WHERE lectureID = '%d'", lectureID);
 
     return executeQuery(query);
+}
+
+// DB에서 lectureID가 일치하는 강의의 memberList에 studentID추가
+bool lecture_registerUser(int lectureID, char *studentID)
+{
+    char query[512];
+    char strLectureID[5];                           //strcmp 함수를 사용하기위해서. 즉 int형을 char로 변환시켜서, 실제로 row[0]에 저장되어있는 lectureID값과 비교하기 위한변수
+
+    sprintf(strLectureID,"%d",lectureID);
+
+
+    sprintf(query, "SELECT * FROM `Lecture` WHERE lectureID = '%d'", lectureID);
+    executeQuery(query);
+
+    MYSQL_RES *result = mysql_store_result(Connection);    //데이터베이스의 원소들을 다루기 위한 핸들링 함수 result;
+    if (result == NULL)
+    {
+        handlingError();
+        return false;
+    }
+
+    MYSQL_ROW row;                                                //row 핸들링 변수 row;
+    while (row = mysql_fetch_row(result))
+    {        
+        if (strcmp(strLectureID,row[0])==0)
+        {
+            sprintf(query, "REPLACE INTO `LectureMember` (`lectureID`, `studentID`) VALUES ('%d', '%s')",lectureID, studentID);
+            executeQuery(query);
+            return true;
+        }
+    }
+    printf("lecture_registerUser() 함수 실패!.\n");
+    return false;
+}     
+
+// DB에서 lectureID가 일치하는 강의의 memberList에 studentID삭제
+bool lecture_deregisterUser(int lectureID, char *studentID)
+{
+
 }
 
 
@@ -339,10 +365,17 @@ int main(void)
     //Lecture 레코드 등록 테스트
     if(createLecture(&lec[0]))
         printf("createLecture() 함수 성공!\n");	//테스트 성공함.
-    
+
+
+    if(lecture_registerUser(1, "55123345"))
+        printf("lecture_registerUser()함수 성공\n");    //테스트 성공함.
+        
+    /*
     //Lecture 레코드 삭제 테스트
     if(removeLecture(1))
 	printf("removeLecture() 함수 성공!\n");	//테스트 성공함.
+    */
+
 
     //isLoginUser 함수 테스트, ID PW로 일치하는지 확인
     if (isLoginUser("1234567","abcabc"))
