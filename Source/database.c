@@ -1,6 +1,7 @@
 #include "database.h"
 
-MYSQL *Connection;                                                         //MySQL 구조체를 핸들링 할 전역 변수+++
+MYSQL *Connection;                                                         //MySQL 구조체를 핸들링 할 전역 변수
+int NumberOfLecture;                                                       //강의 번호를 사용할 전역 변수
 
 //MySQL 서버를 핸들링할 객체를 메모리에 할당하고 초기화 하는 함수.
 //NULL 반환시 예외처리 시키고 종료한다.
@@ -144,7 +145,7 @@ User loadUserByID(char *studentID)
     if (result == NULL)
     {
         handlingError();
-        return NULL;
+        exit(0);                                                //retrun NULL이 컴파일 에러나와서 일단 exit(0);로 대체함.
     }
         
     MYSQL_ROW row;                                                //row 핸들링 변수 row;
@@ -164,7 +165,7 @@ User loadUserByID(char *studentID)
     }
 
     printf("loadUserByID() 함수 실패!.\n");
-    return NULL;
+    exit(0);                                                    //retrun NULL이 컴파일 에러나와서 일단 exit(0);로 대체함.
 }
 
 //에러가 발생하게되면 에러메시지를 띄운다
@@ -178,7 +179,7 @@ Lecture의 table의 갯수와 구조체의 갯수가 다르다. 이유는 member
 그 안에서 어떤 강의를 듣는지 구별 할 수 있는 값을 넣고 필요할때 그 값에 해당되는 모든 user를 출력하면 되기 때문이다.*/
 void createTable()
 {
-    executeQuery("CREATE TABLE IF NOT EXISTS `Test` (`studentID` VARCHAR(16) NOT NULL, `hashedPassword` VARCHAR(64) NOT NULL, `userName` VARCHAR(16) NOT NULL, `role` INT NOT NULL, `registerDate` VARCHAR(64) NOT NULL, PRIMARY KEY (`studentID`))");
+    executeQuery("CREATE TABLE IF NOT EXISTS `User` (`studentID` VARCHAR(16) NOT NULL, `hashedPassword` VARCHAR(64) NOT NULL, `userName` VARCHAR(16) NOT NULL, `role` INT NOT NULL, `registerDate` VARCHAR(64) NOT NULL, PRIMARY KEY (`studentID`))");
     executeQuery("CREATE TABLE IF NOT EXISTS `Lecture` (`lectureID` INT NOT NULL, `lectureName` VARCHAR(64) NOT NULL, `professorID` VARCHAR(16) NOT NULL, `memberCount` INT NOT NULL, `createDate` VARCHAR(64) NOT NULL, PRIMARY KEY (`lectureID`))");
     executeQuery("CREATE TABLE IF NOT EXISTS `AttendanceCheckLog` (`lectureID` INT NOT NULL, `studentID` VARCHAR(16) NOT NULL, `IP` VARCHAR(16) NOT NULL, `quizAnswer` VARCHAR(512) NOT NULL, `checkDate` VARCHAR(64) NOT NULL, PRIMARY KEY (`lectureID`))");
     executeQuery("CREATE TABLE IF NOT EXISTS `ChatLog` (`lectureID` INT NOT NULL, `userName` VARCHAR(16) NOT NULL, `message` VARCHAR(512) NOT NULL, `date` VARCHAR(64) NOT NULL, PRIMARY KEY (`lectureID`))");
@@ -202,32 +203,46 @@ int main(void)
     //구조체에 임시로 데이터값 입력 테스트
     User u[10];
     strcpy(u[0].userName, "장진성");
-       strcpy(u[0].studentID, "201210927");
+    strcpy(u[0].studentID, "201210927");
     strcpy(u[0].hashedPassword, "abcdefg");
-       u[0].role = Student;
+    u[0].role = Student;
 
     strcpy(u[1].userName, "홍길동");
-       strcpy(u[1].studentID, "1234567");
+    strcpy(u[1].studentID, "1234567");
     strcpy(u[1].hashedPassword, "abcabc");
-       u[1].role = Student;
+    u[1].role = Student;
+
+    //Lecture 구조체 테스트
+    Lecture lec[10];
+    lec[0].lectureID = ++NumberOfLecture;
+    strcpy(lec[0].lectureName, "유닉스");
+    strcpy(lec[0].professorID, "550123");
+    lec[0].memberList={    "장진성",
+                            "김수환",
+                            "홍길동",
+                            "이순신",
+                            "유관순",
+                            "김구",
+                            "강감찬",
+                            "무지개"    };
+
 
     //데이터베이스 초기화 세팅 테스트
     if (initializeDatabase())
         printf("초기화 성공!\n");
     if (connectToDatabase())
         printf("연결 성공!\n");
-    if (createTable())
-        printf("테이블 생성 완료!\n");
+
+    //테이블 생성 테스트
+	createTable();
+    printf("테이블 생성 완료!\n");
         
     //테이블 리셋 테스트
-    if (clearUser())
-        printf("User 테이블 초기화 완료!\n");
-    if (clearLecture())
-        printf("Lecture 테이블 초기화 완료!\n");
-    if (clearAttendanceCheckLog())
-        printf("AttendanceCheckLog 테이블 초기화 완료!\n");
-    if (clearChatLog())
-        printf("ChatLog 테이블 초기화 완료!\n");
+    clearUser();
+    clearLecture();
+    clearAttendanceCheckLog();
+    clearChatLog();
+    printf("모든 테이블 초기화 완료!\n");
 
     //등록 테스트
     if (registerUser(&u[1]))
@@ -258,4 +273,17 @@ int main(void)
         printf("종료 성공!\n");
     printf("good bye.\n");
     return 0;
+}
+
+bool createLecture(Lecture *lecture)
+{
+    //구조체의 변수 중 memberList[LECTURE_MAX_MEMBER][16]는 query문에 삽입하지 않았다.
+    
+    char query[512];
+    sprintf(query,"REPLACE INTO `Lecture` (`lectureID`, `lectureName`, `professiorID`, `memberCount`, `createDate`) VALUES ('%d', '%s', '%s', '%d', '%s')",
+        lecture->lectureID, lecture->lectureName, lecture->professorID, lecture->memberCount, ctime(&lecture_deregisterUser->createDate));
+    executeQuery(query);
+
+    "CREATE TABLE IF NOT EXISTS `MemberList`(`lectureID` INT NOT NULL, `memberName` VARCHAR(64) NOT NULL)"
+
 }
