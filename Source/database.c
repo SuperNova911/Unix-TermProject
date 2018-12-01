@@ -1,7 +1,7 @@
 #include "database.h"
 
 MYSQL *Connection;                                                         //MySQL 구조체를 핸들링 할 전역 변수+++
-int NumberOfLecture=0;                                                       //강의 고유번호를 나타내는 전역변수. 1부터 시작해 강의 추가때마다 +1씩 증가함
+//int NumberOfLecture=0;                                                       //강의 고유번호를 나타내는 전역변수. 1부터 시작해 강의 추가때마다 +1씩 증가함
 
 //MySQL 서버를 핸들링할 객체를 메모리에 할당하고 초기화 하는 함수.
 //NULL 반환시 예외처리 시키고 종료한다.
@@ -168,9 +168,43 @@ void clearChatLog()
     executeQuery("DELETE FROM ChatLog");
 }
 
+// Database에서 lectureID가 일치하는 강의 정보 구조체 반환
 Lecture loadLectureByID(int lectureID)
 {
+    char query[512];
+    char strLectureID[5];
+    
+    sprintf(query, "SELECT * FROM `Lecture` WHERE lectureID = '%d'", lectureID);
+    sprintf(strLectureID,"%d",lectureID);
 
+    executeQuery(query);
+
+    Lecture tempLecture;                                        //return할 구조체를 임시로 생성
+    MYSQL_RES *result = mysql_store_result(Connection);    //데이터베이스의 원소들을 다루기 위한 핸들링 함수 result;
+    
+    if (result == NULL)
+    {
+        handlingError();
+        return tempLecture;
+    }
+        
+    MYSQL_ROW row;                                                //row 핸들링 변수 row;
+    while (row = mysql_fetch_row(result))
+    {        
+        if (strcmp(strLectureID,row[0]) == 0)
+        {
+            tempLecture.lectureID = atoi(row[0]);
+            strcpy(tempLecture.lectureName,row[1]);
+            strcpy(tempLecture.professorID,row[2]);
+            tempLecture.memberCount = atoi(row[3]);
+            tempLecture.createDate = 0;                                 //To. Dopa // time_t를 아직 몰라서 0으로 해놨으니 꼭 수정바람.
+
+            return tempLecture;
+        }
+    }
+
+    printf("loadLectureByID() 함수 실패!.\n");
+    return tempLecture;
 }
 
 
@@ -231,10 +265,9 @@ bool lecture_deregisterUser(int lectureID, char *studentID)
     char query[512];
     char strLectureID[5];                           //strcmp 함수를 사용하기위해서. 즉 int형을 char로 변환시켜서, 실제로 row[0]에 저장되어있는 lectureID값과 비교하기 위한변수
 
+    sprintf(query, "SELECT * FROM `Lecture` WHERE lectureID = '%d'", lectureID);
     sprintf(strLectureID,"%d",lectureID);
 
-
-    sprintf(query, "SELECT * FROM `Lecture` WHERE lectureID = '%d'", lectureID);
     executeQuery(query);
 
     MYSQL_RES *result = mysql_store_result(Connection);    //데이터베이스의 원소들을 다루기 위한 핸들링 함수 result;
@@ -369,7 +402,7 @@ int main(void)
 
     //Lecture 구조체 테스트
     Lecture lec[10];
-    lec[0].lectureID = ++NumberOfLecture;
+    lec[0].lectureID = 1;
     lec[0].memberCount = 4;
     strcpy(lec[0].lectureName, "유닉스");
     strcpy(lec[0].professorID, "550123");
@@ -412,7 +445,7 @@ int main(void)
         
     /*//Lecture 레코드 삭제 테스트
     if(removeLecture(1))
-	printf("removeLecture() 함수 성공!\n");	//테스트 성공함. */
+	printf("removeLecture() 함수 성공!\n");	//테스트 성공함. 삭제는 되니까 테스트 조금 더 해보려고 일부로 주석처리시켰음*/
 
     //isLoginUser 함수 테스트, ID PW로 일치하는지 확인
     if (isLoginUser("1234567","abcabc"))
@@ -430,6 +463,14 @@ int main(void)
     printf("%s\n", loadUserByID("201210927").userName);
     printf("%d\n", loadUserByID("201210927").role);
     //결과: 테스트 성공
+
+    //loadLectureByID 함수 테스트, 반환 잘 되는지 확인
+    printf("%d\n",loadLectureByID(1).lectureID);
+    printf("%s\n",loadLectureByID(1).lectureName);
+    printf("%s\n",loadLectureByID(1).professorID);
+    printf("%d\n",loadLectureByID(1).memberCount);
+    printf("%ld\n",loadLectureByID(1).createDate);
+    //결과: 테스트 성공 근데 memberCount는 뭔지?
 
     //데이터베이스 종료 테스트
     if (closeDatabase())
