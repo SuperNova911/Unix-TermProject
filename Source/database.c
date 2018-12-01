@@ -1,7 +1,7 @@
 #include "database.h"
 
 MYSQL *Connection;                                                         //MySQL 구조체를 핸들링 할 전역 변수+++
-int NumberOfLecture;    
+int NumberOfLecture=0;                                                       //강의 고유번호를 나타내는 전역변수. 1부터 시작해 강의 추가때마다 +1씩 증가함
 
 //MySQL 서버를 핸들링할 객체를 메모리에 할당하고 초기화 하는 함수.
 //NULL 반환시 예외처리 시키고 종료한다.
@@ -59,78 +59,6 @@ bool closeDatabase()
     return true;
 }
 
-// 테이블 레코드 비우기
-void clearUser()
-{
-    executeQuery("DELETE FROM User");
-}
-
-void clearLecture()
-{    
-    executeQuery("DELETE FROM Lecture");
-}
-
-void clearAttendanceCheckLog()
-{
-    executeQuery("DELETE FROM AttendanceCheckLog");
-}
-
-void clearChatLog()
-{
-    executeQuery("DELETE FROM ChatLog");
-}
-
-//User구조체를 참조해서 데이터베이스 User 테이블에 값을 저장하는 함수.
-bool registerUser(User *user)
-{
-    char query[512];
-    sprintf(query, "REPLACE INTO `User` (`studentID`, `hashedPassword`, `userName`, `role`, `registerDate`) VALUES ('%s', '%s', '%s', '%d', '%s')",
-        user->studentID, user->hashedPassword, user->userName, user->role, ctime(&user->registerDate));
-    
-    return executeQuery(query);
-}
-
-/*이 함수는 DB에서 studentID와 hashedPassword가 일치하는 사용자가 있는지 확인하는 함수이다.
-학번과 비밀번호를 받아서, User Table에 해당 학번과 비밀번호가 일치한지 확인 한 다음 둘다 일치하면 true를, 그렇지않으면 false를 반환한다.*/
-bool isLoginUser(char *studentID, char *hashedPassword)
-{
-    executeQuery("SELECT * FROM User");                    //User Table을 선택해야만 이 함수는 실행될 수 있기에, SELECT문으로 선택을 먼저했다.
-
-    MYSQL_RES *result = mysql_store_result(Connection);    //데이터베이스의 원소들을 다루기 위한 핸들링 함수 result;
-    if (result == NULL)
-    {
-        handlingError();
-        return false;
-    }
-
-    MYSQL_ROW row;                                                //row 핸들링 변수 row;
-    while (row = mysql_fetch_row(result))
-    {
-        int isItSameID = strcmp(studentID,row[0]);                //strcmp 함수를 통해, 두 문자가 같으면 0을 반환한다.
-        int isItSamePW = strcmp(hashedPassword,row[1]);
-        
-        if ( (isItSameID==0) & (isItSamePW==0) )                    //두개 다 같다면 
-        {
-            printf("찾고자하는 ID와 PW가 일치하는 데이터가 이 테이블 안에 있습니다.\n");
-            mysql_free_result(result);                            //핸들링 변수 result를 닫는다.
-            return true;                                        //true 반환
-        }
-    }
-
-    printf("찾고자하는 ID와 PW가 일치하는 데이터가 이 테이블 안에 없습니다.\n");
-    mysql_free_result(result);                                    //핸들링 변수 result를 닫는다.
-    return false;                                                //두개 다 같은것을 찾지못하면 false반환.
-}
-
-//User 테이블에 studentID가 있으면 해당되는 행을 삭제하는 함수
-bool removeUser(char *studentID)
-{
-    char query[512];
-    sprintf(query, "DELETE FROM `User` WHERE studentID = '%s'", studentID);
-
-    return executeQuery(query);
-}
-
 //Database에서 studentID가 일치하는 사용자 구조체 반환하는 함수
 //WHERE 조건문으로 하려고 했으나 계속 안되어서 어쩔수 없이 isLoginUser()함수와 비슷한 알고리즘으로 구현했다.
 User loadUserByID(char *studentID)
@@ -167,6 +95,110 @@ User loadUserByID(char *studentID)
     printf("loadUserByID() 함수 실패!.\n");
     return tempUser;
 }
+
+//User구조체를 참조해서 데이터베이스 User 테이블에 값을 저장하는 함수.
+bool registerUser(User *user)
+{
+    char query[512];
+    sprintf(query, "REPLACE INTO `User` (`studentID`, `hashedPassword`, `userName`, `role`, `registerDate`) VALUES ('%s', '%s', '%s', '%d', '%s')",
+        user->studentID, user->hashedPassword, user->userName, user->role, ctime(&user->registerDate));
+    
+    return executeQuery(query);
+}
+
+//User 테이블에 studentID가 있으면 해당되는 행을 삭제하는 함수
+bool removeUser(char *studentID)
+{
+    char query[512];
+    sprintf(query, "DELETE FROM `User` WHERE studentID = '%s'", studentID);
+
+    return executeQuery(query);
+}
+
+/*이 함수는 DB에서 studentID와 hashedPassword가 일치하는 사용자가 있는지 확인하는 함수이다.
+학번과 비밀번호를 받아서, User Table에 해당 학번과 비밀번호가 일치한지 확인 한 다음 둘다 일치하면 true를, 그렇지않으면 false를 반환한다.*/
+bool isLoginUser(char *studentID, char *hashedPassword)
+{
+    executeQuery("SELECT * FROM User");                    //User Table을 선택해야만 이 함수는 실행될 수 있기에, SELECT문으로 선택을 먼저했다.
+
+    MYSQL_RES *result = mysql_store_result(Connection);    //데이터베이스의 원소들을 다루기 위한 핸들링 함수 result;
+    if (result == NULL)
+    {
+        handlingError();
+        return false;
+    }
+
+    MYSQL_ROW row;                                                //row 핸들링 변수 row;
+    while (row = mysql_fetch_row(result))
+    {
+        int isItSameID = strcmp(studentID,row[0]);                //strcmp 함수를 통해, 두 문자가 같으면 0을 반환한다.
+        int isItSamePW = strcmp(hashedPassword,row[1]);
+        
+        if ( (isItSameID==0) & (isItSamePW==0) )                    //두개 다 같다면 
+        {
+            printf("찾고자하는 ID와 PW가 일치하는 데이터가 이 테이블 안에 있습니다.\n");
+            mysql_free_result(result);                            //핸들링 변수 result를 닫는다.
+            return true;                                        //true 반환
+        }
+    }
+
+    printf("찾고자하는 ID와 PW가 일치하는 데이터가 이 테이블 안에 없습니다.\n");
+    mysql_free_result(result);                                    //핸들링 변수 result를 닫는다.
+    return false;                                                //두개 다 같은것을 찾지못하면 false반환.
+}
+
+// 테이블 레코드 비우기
+void clearUser()
+{
+    executeQuery("DELETE FROM User");
+}
+
+void clearLecture()
+{    
+    executeQuery("DELETE FROM Lecture");
+}
+
+void clearAttendanceCheckLog()
+{
+    executeQuery("DELETE FROM AttendanceCheckLog");
+}
+
+void clearChatLog()
+{
+    executeQuery("DELETE FROM ChatLog");
+}
+
+bool createLecture(Lecture *lecture)
+{
+    //구조체의 변수 중 memberList[LECTURE_MAX_MEMBER][16]는 query문에 삽입하지 않았고 saveLectureMemberList()함수에 대신 저장했다.  createDate는 %ld말고 일단 %s로 놓았음.
+    char query[512];
+    sprintf(query, "REPLACE INTO `Lecture` (`lectureID`, `lectureName`, `professorID`, `memberCount`, `createDate`) VALUES ('%d', '%s', '%s', '%d', '%s')",
+        lecture->lectureID, lecture->lectureName, lecture->professorID, lecture->memberCount, ctime(&lecture->createDate));
+    
+    return executeQuery(query);
+}
+
+//"CREATE TABLE IF NOT EXISTS `Lecture` 
+//(`lectureID` INT NOT NULL, `lectureName` VARCHAR(64) NOT NULL, `professorID` VARCHAR(16) NOT NULL, `memberCount` INT NOT NULL, `createDate` BIGINT NOT NULL, PRIMARY KEY (`lectureID`))"
+/*
+bool registerUser(User *user)
+{
+    char query[512];
+    sprintf(query, "REPLACE INTO `User` (`studentID`, `hashedPassword`, `userName`, `role`, `registerDate`) VALUES ('%s', '%s', '%s', '%d', '%s')",
+        user->studentID, user->hashedPassword, user->userName, user->role, ctime(&user->registerDate));
+    
+    return executeQuery(query);
+}
+*/
+
+bool removeLecture(int lectureID)
+{
+    char query[512];
+    sprintf(query, "DELETE FROM `Lecture` WHERE lectureID = '%d'", lectureID);
+
+    return executeQuery(query);
+}
+
 
 //에러가 발생하게되면 에러메시지를 띄운다
 void handlingError()
@@ -237,6 +269,7 @@ bool loadLectureMemberList(Lecture *lecture)
     return true;
 }
 
+/*
 // time_t 자료형을 문자열로 변환
 // [매개변수] result: 변환된 문자열을 저장 할 문자열 포인터, size: 문자열 크기, time: 변환 할 time_t 자료형
 void timeToString(char *result, int size, time_t *time)
@@ -252,6 +285,7 @@ void stringToTime(time_t *result, char *timeString)
     strptime(timeString, "%Y:%m:%d:%H:%M:%S", &tm);
     *result = mktime(&tm);
 }
+*/
 
 int main(void)
 {
@@ -271,17 +305,13 @@ int main(void)
     //Lecture 구조체 테스트
     Lecture lec[10];
     lec[0].lectureID = ++NumberOfLecture;
+    lec[0].memberCount = 4;
     strcpy(lec[0].lectureName, "유닉스");
     strcpy(lec[0].professorID, "550123");
-    lec[0].memberList={    "장진성",
-                            "김수환",
-                            "홍길동",
-                            "이순신",
-                            "유관순",
-                            "김구",
-                            "강감찬",
-                            "무지개"    };
-
+    strncpy(lec[0].memberList[0], "201512345", sizeof(lec[0].memberList[0]));
+    strncpy(lec[0].memberList[1], "201210927", sizeof(lec[0].memberList[1]));
+    strncpy(lec[0].memberList[2], "199823455", sizeof(lec[0].memberList[2]));
+    strncpy(lec[0].memberList[3], "200212345", sizeof(lec[0].memberList[3]));
 
     //데이터베이스 초기화 세팅 테스트
     if (initializeDatabase())
@@ -306,6 +336,14 @@ int main(void)
     if (registerUser(&u[0]))
         printf("테이블에 데이터 등록 완료!\n");
 
+    //Lecture 레코드 등록 테스트
+    if(createLecture(&lec[0]))
+        printf("createLecture() 함수 성공!\n");	//테스트 성공함.
+    
+    //Lecture 레코드 삭제 테스트
+    if(removeLecture(1))
+	printf("removeLecture() 함수 성공!\n");	//테스트 성공함.
+
     //isLoginUser 함수 테스트, ID PW로 일치하는지 확인
     if (isLoginUser("1234567","abcabc"))
         printf("isLoginUser 함수 작동 정상!\n");
@@ -329,17 +367,4 @@ int main(void)
         printf("종료 성공!\n");
     printf("good bye.\n");
     return 0;
-}
-
-bool createLecture(Lecture *lecture)
-{
-    //구조체의 변수 중 memberList[LECTURE_MAX_MEMBER][16]는 query문에 삽입하지 않았다.
-    
-    char query[512];
-    sprintf(query,"REPLACE INTO `Lecture` (`lectureID`, `lectureName`, `professiorID`, `memberCount`, `createDate`) VALUES ('%d', '%s', '%s', '%d', '%s')",
-        lecture->lectureID, lecture->lectureName, lecture->professorID, lecture->memberCount, ctime(&lecture_deregisterUser->createDate));
-    executeQuery(query);
-
-    "CREATE TABLE IF NOT EXISTS `MemberList`(`lectureID` INT NOT NULL, `memberName` VARCHAR(64) NOT NULL)"
-
 }
