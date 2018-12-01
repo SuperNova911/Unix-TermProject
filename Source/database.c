@@ -1,7 +1,7 @@
 #include "database.h"
 
-MYSQL *Connection;                                                         //MySQL 구조체를 핸들링 할 전역 변수
-int NumberOfLecture;                                                       //강의 번호를 사용할 전역 변수
+MYSQL *Connection;                                                         //MySQL 구조체를 핸들링 할 전역 변수+++
+int NumberOfLecture;    
 
 //MySQL 서버를 핸들링할 객체를 메모리에 할당하고 초기화 하는 함수.
 //NULL 반환시 예외처리 시키고 종료한다.
@@ -145,7 +145,7 @@ User loadUserByID(char *studentID)
     if (result == NULL)
     {
         handlingError();
-        exit(0);                                                //retrun NULL이 컴파일 에러나와서 일단 exit(0);로 대체함.
+        return tempUser;
     }
         
     MYSQL_ROW row;                                                //row 핸들링 변수 row;
@@ -165,7 +165,7 @@ User loadUserByID(char *studentID)
     }
 
     printf("loadUserByID() 함수 실패!.\n");
-    exit(0);                                                    //retrun NULL이 컴파일 에러나와서 일단 exit(0);로 대체함.
+    return tempUser;
 }
 
 //에러가 발생하게되면 에러메시지를 띄운다
@@ -181,6 +181,7 @@ void createTable()
 {
     executeQuery("CREATE TABLE IF NOT EXISTS `User` (`studentID` VARCHAR(16) NOT NULL, `hashedPassword` VARCHAR(64) NOT NULL, `userName` VARCHAR(16) NOT NULL, `role` INT NOT NULL, `registerDate` VARCHAR(64) NOT NULL, PRIMARY KEY (`studentID`))");
     executeQuery("CREATE TABLE IF NOT EXISTS `Lecture` (`lectureID` INT NOT NULL, `lectureName` VARCHAR(64) NOT NULL, `professorID` VARCHAR(16) NOT NULL, `memberCount` INT NOT NULL, `createDate` VARCHAR(64) NOT NULL, PRIMARY KEY (`lectureID`))");
+	executeQuery("CREATE TABLE IF NOT EXISTS `LectureMember` (`lectureID` INT NOT NULL, `studentID` VARCHAR(16) NOT NULL)");
     executeQuery("CREATE TABLE IF NOT EXISTS `AttendanceCheckLog` (`lectureID` INT NOT NULL, `studentID` VARCHAR(16) NOT NULL, `IP` VARCHAR(16) NOT NULL, `quizAnswer` VARCHAR(512) NOT NULL, `checkDate` VARCHAR(64) NOT NULL, PRIMARY KEY (`lectureID`))");
     executeQuery("CREATE TABLE IF NOT EXISTS `ChatLog` (`lectureID` INT NOT NULL, `userName` VARCHAR(16) NOT NULL, `message` VARCHAR(512) NOT NULL, `date` VARCHAR(64) NOT NULL, PRIMARY KEY (`lectureID`))");
 }
@@ -195,6 +196,61 @@ bool executeQuery(char *sql)
     }
 
     return true;
+}
+
+// 강의 멤버 목록을 LectureMember테이블에 저장
+// [매개변수] lecture: 멤버 목록을 저장 할 Lecture 포인터
+void saveLectureMemberList(Lecture *lecture)
+{
+	char query[512];
+	for (int index = 0; index < lecture->memberCount; index++)
+	{
+		sprintf(query, "REPLACE INTO `LectureMember` (`lectureID`, `studentID`) VALUES ('%d', '%s')",
+			lecture->lectureID, lecture->memberList[index]);
+        executeQuery(query);
+	}
+}
+
+// 강의 멤버 목록을 LectureMember테이블에서 불러옴
+// [매개변수] lecture: 멤버 목록을 불러올 Lecture 포인터
+bool loadLectureMemberList(Lecture *lecture)
+{
+	char query[512];
+    sprintf(query, "SELECT * FROM `LectureMember` WHERE lectureID = '%d'", lecture->lectureID);
+    executeQuery(query);
+
+    MYSQL_RES *result;
+    result = mysql_store_result(Connection);
+    if (result == NULL)
+    {
+        handlingError();
+        return false;
+    }
+
+    MYSQL_ROW row;
+    for (int index = 0; row = mysql_fetch_row(result); index++)
+    {
+        strncpy(lecture->memberList[index], row[1], sizeof(lecture->memberList[index]));
+        lecture->memberCount++;
+    }
+
+    return true;
+}
+
+// time_t 자료형을 문자열로 변환
+// [매개변수] result: 변환된 문자열을 저장 할 문자열 포인터, size: 문자열 크기, time: 변환 할 time_t 자료형
+void timeToString(char *result, int size, time_t *time)
+{
+    strftime(result, size, "%Y:%m:%d:%H:%M:%S", localtime(time));
+}
+
+// 문자열을 time_t 자료형으로 변환
+// [매개변수] result: 변환된 time_t 자료형을 저장 할 time_t 포인터, timeString: 변환 할 문자열
+void stringToTime(time_t *result, char *timeString)
+{
+    struct tm tm;
+    strptime(timeString, "%Y:%m:%d:%H:%M:%S", &tm);
+    *result = mktime(&tm);
 }
 
 int main(void)
