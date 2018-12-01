@@ -28,7 +28,7 @@ typedef struct Lecture_t
 {
     int lectureID;
     char lectureName[128];
-    int professorID[16];
+    char professorID[16];
     int memberCount;
     char memeberList[LECTURE_MAX_MEMBER][16];
     time_t createDate;
@@ -58,7 +58,7 @@ bool connectToDatabase();       // 데이터베이스에 연결+++
 bool closeDatabase();           // 데이터베이스 닫기+++
 
 User *loadUser(User user[], int amount, int lectureID);     // DB에서 lectureID가 일치하는 사용자 구조체 배열 반환
-User loadUserByID(char *studentID);                         // DB에서 studentID가 일치하는 사용자 구조체 반환+++
+User loadUserByID(char *studentID);                         // DB에서 studentID가 일치하는 사용자 구조체 반환
 bool registerUser(User *user);                              // DB에 새로운 사용자 정보 저장+++
 bool removeUser(char *studentID);                           // DB에서 studentID가 일치하는 사용자 삭제+++
 bool isLoginUser(char *studentID, char *hashedPassword);    // DB에서 studentID와 hashedPassword가 일치하는 사용자가 있는지 확인+++
@@ -81,6 +81,7 @@ bool saveChatLog(ChatLog *chatLog);                                       // DB�
 void clearChatLog();                                                      // CahtLog 테이블 초기화+++
 
 // 11.28 추가
-bool handlingError(MYSQL *Connect);                                     //에러 발생시 실행되는 함수+++
-bool makeTables();                                                      //Database에 4개의 테이블을 만드는 함수+++
-bool excuteQuery(char *sql);                                            //쿼리문을 실행시키고 동시에 에러검사 까지하는 함수+++
+// h파일이랑 c파일 함수 선언 순서좀 맞춰주세요
+void handlingError();                                     //에러 발생시 실행되는 함수+++
+void createTable();                                                      //Database에 4개의 테이블을 만드는 함수+++
+bool executeQuery(char *query); //쿼리문을 실행시키고 동시에 에러검사 까지하는 함수+++
