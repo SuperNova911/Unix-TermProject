@@ -62,7 +62,7 @@ void resetUser(User *user)
 
 void resetUserInfo(UserInfo *userInfo)
 {
-    memset(userInfo, 0, sizeof(userInfo));
+    memset(userInfo, 0, sizeof(UserInfo));
 }
 
 bool hasPermission(Role role)
