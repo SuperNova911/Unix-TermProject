@@ -1,5 +1,7 @@
 #include "dataPack.h"
 #include "interface.h"
+#include "user.h"
+#include "lecture.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -648,7 +650,7 @@ void receiveUserCommand()
                     TargetArgument = 1;
                     break;
                 case 3:
-                    if (CurrentUserInfo.role == Student)
+                    if (CurrentUserInfo.role == USER_STUDENT)
                     {
                         setArgumentGuide("가입할 강의 이름을 입력하세요", NULL, NULL, NULL, NULL);
                         CurrentRequest = LECTURE_REGISTER_REQUEST;
@@ -664,7 +666,7 @@ void receiveUserCommand()
                     }
                     break;
                 case 4:
-                    if (CurrentUserInfo.role == Student)
+                    if (CurrentUserInfo.role == USER_STUDENT)
                     {
                         setArgumentGuide("탈퇴할 강의 이름을 입력하세요", NULL, NULL, NULL, NULL);
                         CurrentRequest = LECTURE_DEREGISTER_REQUEST;
@@ -695,7 +697,7 @@ void receiveUserCommand()
             switch (atoi(UserInputBuffer))
             {
                 case 1:
-                    if (CurrentUserInfo.role == Student)
+                    if (CurrentUserInfo.role == USER_STUDENT)
                     {
                         // composeDataPack(LECTURE_NOTICE_REQUEST);
                     }
@@ -708,7 +710,7 @@ void receiveUserCommand()
                     }
                     break;
                 case 2:
-                    if (CurrentUserInfo.role == Student)
+                    if (CurrentUserInfo.role == USER_STUDENT)
                         composeDataPack(ATTENDANCE_CHECK_REQUEST);
                     else
                         changeClientStatus(Attendance);
@@ -828,10 +830,10 @@ void updateCommandByStatus()
 {
     switch (CurrentUserInfo.role)
     {
-        case Admin:
+        case USER_ADMIN:
             break;
         
-        case Student:
+        case USER_STUDENT:
             switch (CurrentClientStatus)
             {
                 case Login:
@@ -857,7 +859,7 @@ void updateCommandByStatus()
             }
             break;
         
-        case Professor:
+        case USER_PROFESSOR:
             switch (CurrentClientStatus)
             {
                 case Login:
