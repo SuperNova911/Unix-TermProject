@@ -32,7 +32,8 @@ typedef struct OnlineUser_t
     bool onChat;
 } OnlineUser;
 
-User buildUser(char *studentID, char *hashedPassword, char *userName, Role role, time_t registerDate);
+User createUser(char *studentID, char *hashedPassword, char *userName, Role role);
+void buildUser(User *user, char *studentID, char *hashedPassword, char *userName, Role role, time_t registerDate);
 UserInfo buildUserInfo(char *studentID, char *userName, Role role);
 UserInfo getUserInfo(User *user);
 

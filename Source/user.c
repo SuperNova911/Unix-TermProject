@@ -6,7 +6,7 @@ const char *UserRoleString[4] =
     "None", "Admin", "Professor", "Student"
 };
 
-User buildUser(char *studentID, char *hashedPassword, char *userName, Role role, time_t registerDate)
+User createUser(char *studentID, char *hashedPassword, char *userName, Role role)
 {
     User user;
     resetUser(&user);
@@ -15,15 +15,26 @@ User buildUser(char *studentID, char *hashedPassword, char *userName, Role role,
     strncpy(user.hashedPassword, hashedPassword, sizeof(user.hashedPassword));
     strncpy(user.userName, userName, sizeof(user.userName));
     user.role = role;
-    user.registerDate = registerDate;
+    time(&user.registerDate);
 
     return user;
+}
+
+void buildUser(User *user, char *studentID, char *hashedPassword, char *userName, Role role, time_t registerDate)
+{
+    resetUser(user);
+
+    strncpy(user->studentID, studentID, sizeof(user->studentID));
+    strncpy(user->hashedPassword, hashedPassword, sizeof(user->hashedPassword));
+    strncpy(user->userName, userName, sizeof(user->userName));
+    user->role = role;
+    user->registerDate = registerDate;
 }
 
 UserInfo buildUserInfo(char *studentID, char *userName, Role role)
 {
     UserInfo userInfo;
-    resetUser(&userInfo);
+    resetUserInfo(&userInfo);
 
     strncpy(userInfo.studentID, studentID, sizeof(userInfo.studentID));
     strncpy(userInfo.userName, userName, sizeof(userInfo.userName));
@@ -35,7 +46,7 @@ UserInfo buildUserInfo(char *studentID, char *userName, Role role)
 UserInfo getUserInfo(User *user)
 {
     UserInfo userInfo;
-    resetUser(&userInfo);
+    resetUserInfo(&userInfo);
 
     strncpy(userInfo.studentID, user->studentID, sizeof(userInfo.studentID));
     strncpy(userInfo.userName, user->userName, sizeof(userInfo.userName));
