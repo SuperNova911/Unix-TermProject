@@ -26,12 +26,6 @@ enum ClientStatus
     Default, Login, LectureBrowser, Lobby, Chat, Attendance
 } CurrentClientStatus;
 
-struct LoginInfo_t
-{
-    char studentID[16];
-    char password[32];
-} LoginInfo;
-
 struct CurrentLectureInfo_t
 {
     int lectureID;
@@ -111,9 +105,6 @@ int main()
         sleep(3);
     }
 
-    strncpy(LoginInfo.studentID, "201510743", sizeof(LoginInfo.studentID));
-    strncpy(LoginInfo.password, "suwhan77", sizeof(LoginInfo.password));
-
     changeClientStatus(Login);
 
     async();
@@ -128,7 +119,6 @@ void initializeGlobalVariable()
     CurrentRequest = NONE;
 
     memset(&CurrentUserInfo, 0, sizeof(UserInfo));
-    memset(&LoginInfo, 0, sizeof(struct LoginInfo_t));
     memset(&CurrentLectureInfo, 0, sizeof(struct CurrentLectureInfo_t));
 
     memset(UserInputGuide, 0, sizeof(UserInputGuide));
@@ -277,11 +267,15 @@ bool composeDataPack(enum Command command)
     {
         case USER_LOGIN_REQUEST:
             buildDataPack(&dataPack, Arguments[0], Arguments[1], NULL, NULL, NULL);
-            // memset(&LoginInfo, 0, sizeof(struct LoginInfo_t));   디버깅
             break;
         
         case USER_LOGOUT_REQUEST:
             break;
+
+        case USER_REGISTER_REQUEST:
+            buildDataPack(&dataPack, Arguments[0], Arguments[1], NULL, NULL, NULL);
+            UserInfo userInfo = buildUserInfo(Arguments[0], Arguments[2], USER_STUDENT);
+            memcpy(&dataPack.userInfo, &userInfo, sizeof(UserInfo));
 
         case LECTURE_LIST_REQUEST:
             break;
@@ -292,6 +286,14 @@ bool composeDataPack(enum Command command)
         
         case LECTURE_REMOVE_REQUEST:
             buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, NULL);
+            break;
+
+        case LECTURE_NOTICE_REQUEST:
+            buildDataPack(&dataPack, CurrentLectureInfo.lectureName, NULL, NULL, NULL, NULL);
+            break;
+
+        case LECTURE_NOTICE_SET_REQUEST:
+            buildDataPack(&dataPack, CurrentLectureInfo.lectureName, NULL, NULL, NULL, Arguments[0]);
             break;
         
         case LECTURE_ENTER_REQUEST:
@@ -357,7 +359,7 @@ bool composeDataPack(enum Command command)
 // [반환] true: 성공적으로 DataPack 분석을 함, false: 잘못된 DataPack의 Command
 bool decomposeDataPack(DataPack *dataPack)
 {
-    printMessage(MessageWindow, "command: '%d', message: '%s'\n", dataPack->command, dataPack->message);
+    // printMessage(MessageWindow, "command: '%d', message: '%s'\n", dataPack->command, dataPack->message);
 
     switch(dataPack->command)
     {
@@ -366,7 +368,10 @@ bool decomposeDataPack(DataPack *dataPack)
             {
                 memcpy(&CurrentUserInfo, &dataPack->userInfo, sizeof(UserInfo));
                 changeClientStatus(LectureBrowser);
-                printMessage(MessageWindow, "로그인 성공, 학번: '%s', 이름: '%s', 역할: '%s'\n", dataPack->userInfo.studentID, dataPack->userInfo.userName, UserRoleString[dataPack->userInfo.role]);
+                printMessage(MessageWindow, "로그인 성공, 학번: '%s', 이름: '%s', 역할: '%s'\n\n", 
+                    dataPack->userInfo.studentID, dataPack->userInfo.userName, UserRoleString[dataPack->userInfo.role]);
+
+                composeDataPack(LECTURE_LIST_REQUEST);
             }
             else
                 printMessage(MessageWindow, "로그인에 실패하였습니다. 오류: '%s'\n", dataPack->message);
@@ -379,6 +384,15 @@ bool decomposeDataPack(DataPack *dataPack)
             }
             else
                 printMessage(MessageWindow, "로그아웃을 시도하던 중 문제가 발생하였습니다. 오류: '%s'\n", dataPack->message);
+            break;
+        case USER_REGISTER_RESPONSE:
+            if (dataPack->result)
+            {
+                printMessage(MessageWindow, "회원가입 성공, 학번: '%s', 이름: '%s', 역할: '%s'\n", 
+                    dataPack->userInfo.studentID, dataPack->userInfo.userName, UserRoleString[dataPack->userInfo.role]);
+            }
+            else
+                printMessage(MessageWindow, "회원가입에 실패하였습니다. 오류: '%s'\n", dataPack->message);
             break;
 
         case LECTURE_LIST_RESPONSE:
@@ -404,6 +418,22 @@ bool decomposeDataPack(DataPack *dataPack)
             }
             else
                 printMessage(MessageWindow, "강의를 삭제할 수 없습니다. 오류: '%s'\n", dataPack->message);
+            break;
+        case LECTURE_NOTICE_RESPONSE:
+            if (dataPack->result)
+            {
+                printMessage(MessageWindow, "공지사항을 불러옵니다. 강의명: '%s'\n%s\n", dataPack->data1, dataPack->message);
+            }
+            else
+                printMessage(MessageWindow, "공지사항을 불러올 수 없습니다. 오류: '%s'\n", dataPack->message);
+            break;
+        case LECTURE_NOTICE_SET_RESPONSE:
+            if (dataPack->result)
+            {
+                printMessage(MessageWindow, "새로운 공지사항이 등록되었습니다, 공지사항을 확인하세요. 강의명: '%s'\n", dataPack->data1);
+            }
+            else
+                printMessage(MessageWindow, "공지를 등록할 수 없습니다. 오류: '%s'\n", dataPack->message);
             break;
         case LECTURE_ENTER_RESPONSE:
             if (dataPack->result)
@@ -631,10 +661,22 @@ void receiveUserCommand()
     switch (CurrentClientStatus)
     {
         case Login:
-            setArgumentGuide("학번을 입력하세요", "비밀번호를 입력하세요", NULL, NULL, NULL);
-            CurrentRequest = USER_LOGIN_REQUEST;
-            ReceiveArgument = true;
-            TargetArgument = 2;
+            switch (atoi(UserInputBuffer))
+            {
+                case 1:
+                    setArgumentGuide("학번을 입력하세요", "비밀번호를 입력하세요", NULL, NULL, NULL);
+                    CurrentRequest = USER_LOGIN_REQUEST;
+                    ReceiveArgument = true;
+                    TargetArgument = 2;
+                    break;
+                case 2:
+                    setArgumentGuide("학번을 입력하세요", "비밀번호를 입력하세요", "이름을 입력하세요", NULL, NULL);
+                    CurrentRequest = USER_REGISTER_REQUEST;
+                    ReceiveArgument = true;
+                    TargetArgument = 3;
+                    break;
+
+            }
             break;
 
         case LectureBrowser:
@@ -699,12 +741,12 @@ void receiveUserCommand()
                 case 1:
                     if (CurrentUserInfo.role == USER_STUDENT)
                     {
-                        // composeDataPack(LECTURE_NOTICE_REQUEST);
+                        composeDataPack(LECTURE_NOTICE_REQUEST);
                     }
                     else
                     {
                         setArgumentGuide("등록할 공지사항을 입력하세요", NULL, NULL, NULL, NULL);
-                        // CurrentRequest = LECTURE_NOTICE_SET_REQUEST;
+                        CurrentRequest = LECTURE_NOTICE_SET_REQUEST;
                         ReceiveArgument = true;
                         TargetArgument = 1;
                     }
@@ -837,6 +879,7 @@ void updateCommandByStatus()
             switch (CurrentClientStatus)
             {
                 case Login:
+                    updateCommand("1. 로그인\n2. 회원 가입\n\n\n\n\n\n\n\n0: 프로그램 종료");
                     break;
 
                 case LectureBrowser:
@@ -863,6 +906,7 @@ void updateCommandByStatus()
             switch (CurrentClientStatus)
             {
                 case Login:
+                    updateCommand("1. 로그인\n2. 회원 가입\n\n\n\n\n\n\n\n0: 프로그램 종료");
                     break;
 
                 case LectureBrowser:
@@ -887,6 +931,15 @@ void updateCommandByStatus()
             break;
 
         default:
+            switch (CurrentClientStatus)
+            {
+                case Login:
+                    updateCommand("1. 로그인\n2. 회원 가입\n\n\n\n\n\n\n\n0: 프로그램 종료");
+                    break;
+
+                default:
+                    break;
+            }
             break;
     }
 } 
@@ -902,7 +955,7 @@ void updateInputByStatus()
     switch (CurrentClientStatus)
     {
         case Login:
-            strncpy(UserInputGuide, "Input", sizeof(UserInputGuide));
+            strncpy(UserInputGuide, "명령어를 입력하세요", sizeof(UserInputGuide));
             break;
 
         case LectureBrowser:

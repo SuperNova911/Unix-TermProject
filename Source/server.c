@@ -39,9 +39,12 @@ void decomposeDataPack(int sender, DataPack *dataPack);
 
 void userLogin(int sender, char *studentID, char *password);
 void userLogout(int sender, UserInfo *userInfo);
+void userRegister(int sender, char *studentID, char *password, UserInfo *userInfo);
 void lectureList(int sender);
 void lectureCreate(int sender, char *lectureName, UserInfo *userInfo);
 void lectureRemove(int sender, char *lectureName, UserInfo *userInfo);
+void lectureNotice(int sender, char *lectureName);
+void lectureNoticeSet(int sender, char *lectureName, char *message, UserInfo *userInfo);
 void lectureEnter(int sender, char *lectureName, UserInfo *userInfo);
 void lectureLeave(int sender, char *lectureName, UserInfo *userInfo);
 void lectureRegister(int sender, char *lectureName, UserInfo *userInfo);
@@ -293,6 +296,9 @@ void decomposeDataPack(int sender, DataPack *dataPack)
         case USER_LOGOUT_REQUEST:
             userLogout(sender, &dataPack->userInfo);
             break;
+        case USER_REGISTER_REQUEST:
+            userRegister(sender, dataPack->data1, dataPack->data2, &dataPack->userInfo);
+            break;
 
         case LECTURE_LIST_REQUEST:
             lectureList(sender);
@@ -302,6 +308,12 @@ void decomposeDataPack(int sender, DataPack *dataPack)
             break;
         case LECTURE_REMOVE_REQUEST:
             lectureRemove(sender, dataPack->data1, &dataPack->userInfo);
+            break;
+        case LECTURE_NOTICE_REQUEST:
+            lectureNotice(sender, dataPack->data1);
+            break;
+        case LECTURE_NOTICE_SET_REQUEST:
+            lectureNoticeSet(sender, dataPack->data1, dataPack->message, &dataPack->userInfo);
             break;
         case LECTURE_ENTER_REQUEST:
             lectureEnter(sender, dataPack->data1, &dataPack->userInfo);
@@ -373,6 +385,16 @@ void userLogin(int sender, char *studentID, char *password)
         return;
     }
 
+    for (int index = 0; index < UserCount; index++)
+    {
+        if (strcmp(OnlineUserList[index].user.studentID, studentID) == 0)
+        {
+            setErrorMessage(&dataPack, "이미 로그인 중 입니다");
+            sendDataPack(sender, &dataPack);
+            return;
+        }
+    }
+
     if (addOnlineUser(&user, sender) == false)
     {
         setErrorMessage(&dataPack, "서버가 가득 찼습니다");
@@ -421,6 +443,36 @@ void userLogout(int sender, UserInfo *userInfo)
         return;
     }
 
+    dataPack.result = true;
+    sendDataPack(sender, &dataPack);
+}
+
+void userRegister(int sender, char *studentID, char *password, UserInfo *userInfo)
+{
+    DataPack dataPack;
+    resetDataPack(&dataPack);
+    dataPack.command = USER_REGISTER_RESPONSE;
+
+    bool dbResult;
+    loadUserByID(studentID, &dbResult);
+
+    if (dbResult)
+    {
+        setErrorMessage(&dataPack, "해당 학번으로 등록된 계정이 이미 있습니다.");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    User user = createUser(studentID, password, userInfo->userName, userInfo->role);
+    if (saveUser(&user) == false)
+    {
+        setErrorMessage(&dataPack, "DB에 저장하던 중 문제가 발생하였습니다.");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    UserInfo newUserInfo = getUserInfo(&user);
+    memcpy(&dataPack.userInfo, &newUserInfo, sizeof(dataPack.userInfo));
     dataPack.result = true;
     sendDataPack(sender, &dataPack);
 }
@@ -519,6 +571,80 @@ void lectureRemove(int sender, char *lectureName, UserInfo *userInfo)
 
     dataPack.result = true;
     sendDataPack(sender, &dataPack);
+}
+
+void lectureNotice(int sender, char *lectureName)
+{
+    DataPack dataPack;
+    resetDataPack(&dataPack);
+    dataPack.command = LECTURE_NOTICE_RESPONSE;
+
+    bool findResult;
+    LectureInfo *lectureInfo = findLectureInfoByName(lectureName, &findResult);
+    if (findResult == false)
+    {
+        setErrorMessage(&dataPack, "현재 입장중인 강의 정보가 잘못되었습니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    const int NOTICE_NUM = 3;
+    char noticeList[NOTICE_NUM][512];
+    int loaded;
+    loaded = loadLectureNotice(noticeList, NOTICE_NUM, lectureInfo->lecture.lectureID);
+
+    if (loaded == 0)
+    {
+        setErrorMessage(&dataPack, "등록된 공지사항이 없습니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    for (int index = 0; index < loaded; index++)
+    {
+        buildDataPack(&dataPack, NULL, NULL, NULL, NULL, noticeList[index]);
+        dataPack.result = true;
+        sendDataPack(sender, &dataPack);
+    }
+}
+
+void lectureNoticeSet(int sender, char *lectureName, char *message, UserInfo *userInfo)
+{
+    DataPack dataPack;
+    resetDataPack(&dataPack);
+    dataPack.command = LECTURE_NOTICE_SET_RESPONSE;
+
+    if (hasPermission(userInfo->role) == false)
+    {
+        setErrorMessage(&dataPack, "공지를 등록할 권한이 없습니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    bool findResult;
+    LectureInfo *lectureInfo = findLectureInfoByName(lectureName, &findResult);
+    if (findResult == false)
+    {
+        setErrorMessage(&dataPack, "현재 입장중인 강의 정보가 잘못되었습니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    if (saveLectureNotice(lectureInfo->lecture.lectureID, message) == false)
+    {
+        setErrorMessage(&dataPack, "DB에 저장중에 문제가 발생하였습니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    dataPack.result = true;
+    for (int index = 0; index < lectureInfo->onlineUserCount; index++)
+    {
+        if (FD_ISSET(lectureInfo->onlineUser[index]->socket, &Master))
+        {
+            sendDataPack(sender, &dataPack);
+        }
+    }
 }
 
 void lectureEnter(int sender, char *lectureName, UserInfo *userInfo)
@@ -1151,9 +1277,9 @@ bool userEnterLecture(char *studentID, char *lectureName)
     if (findResult == false)
         return false;
 
-    for (int index = 0; index < lectureInfo->onlineUserCount)
+    for (int index = 0; index < lectureInfo->onlineUserCount; index++)
     {
-        if (strcmp(lectureInfo->onlineUser[index].user.studentID, studentID) == 0)
+        if (strcmp(lectureInfo->onlineUser[index]->user.studentID, studentID) == 0)
         {
             userLeaveLecture(studentID, lectureName);
             break;
@@ -1325,9 +1451,9 @@ int getNextLectureID()
     int max = 1;
     for (int index = 0; index < LectureCount; index++)
     {
-        if (LectureInfoList[index].lectureID > max)
+        if (LectureInfoList[index].lecture.lectureID > max)
         {
-            max = LectureInfoList[index].lectureID;
+            max = LectureInfoList[index].lecture.lectureID;
         }
     }
 
