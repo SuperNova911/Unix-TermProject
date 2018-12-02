@@ -35,6 +35,7 @@ void createTable()
 	executeQuery("CREATE TABLE IF NOT EXISTS `User` (`studentID` VARCHAR(16) NOT NULL, `hashedPassword` VARCHAR(64) NOT NULL, `userName` VARCHAR(16) NOT NULL, `role` INT NOT NULL, `registerDate` BIGINT NOT NULL, PRIMARY KEY (`studentID`))");
 	executeQuery("CREATE TABLE IF NOT EXISTS `Lecture` (`lectureID` INT NOT NULL, `lectureName` VARCHAR(64) NOT NULL, `professorID` VARCHAR(16) NOT NULL, `memberCount` INT NOT NULL, `createDate` BIGINT NOT NULL, PRIMARY KEY (`lectureID`))");
 	executeQuery("CREATE TABLE IF NOT EXISTS `LectureMember` (`lectureID` INT NOT NULL, `studentID` VARCHAR(16) NOT NULL)");
+	executeQuery("CREATE TABLE IF NOT EXISTS `LectureNotice` (`lectureID` INT NOT NULL, `message` VARCHAR(512) NOT NULL, `date` BIGINT NOT NULL)");
 	executeQuery("CREATE TABLE IF NOT EXISTS `AttendanceCheckLog` (`lectureID` INT NOT NULL, `studentID` VARCHAR(16) NOT NULL, `IP` VARCHAR(16) NOT NULL, `quizAnswer` VARCHAR(512) NOT NULL, `checkDate` BIGINT NOT NULL)");
 	executeQuery("CREATE TABLE IF NOT EXISTS `ChatLog` (`lectureID` INT NOT NULL, `userName` VARCHAR(16) NOT NULL, `message` VARCHAR(512) NOT NULL, `date` BIGINT NOT NULL)");
 }
@@ -265,6 +266,44 @@ void saveLectureMemberList(Lecture *lecture)
 	}
 }
 
+int loadLectureNotice(char noticeList[][512], int amount, int lectureID)
+{
+	char query[512];
+	sprintf(query, "SELECT * FROM `LectureNotice` WHERE lectureID = '%d' ORDER BY date DESC LIMIT %d", lectureID, amount);
+	executeQuery(query);
+
+	int index = 0;
+
+	MYSQL_RES *result;
+	result = mysql_store_result(Connection);
+	if (result == NULL)
+	{
+		printError();
+		return index;
+	}
+
+	MYSQL_ROW row;
+	while (((row = mysql_fetch_row(result)) != NULL) && index < amount)
+	{
+		strncpy(noticeList[index], row[1], sizeof(char) * 512);
+		index++;
+	}
+
+	return index;
+}
+
+bool saveLectureNotice(int lectureID, char *message)
+{
+	time_t timeNow;
+	time(&timeNow);
+
+	char query[1024];
+	sprintf(query, "INSERT INTO `LectureNotice` (`lectureID`, `message`, `date`) VALUES ('%d', '%s', '%ld')",
+		lectureID, message, timeNow);
+	
+	return executeQuery(query);
+}
+
 bool clearLecture()
 {
 	return executeQuery("DELETE FROM `Lecture`");
@@ -273,6 +312,11 @@ bool clearLecture()
 bool clearLectureMember()
 {
 	return executeQuery("DELETE FROM `LectureMember`");
+}
+
+bool clearLectureNotice()
+{
+	return executeQuery("DELETE FROM `LectureNotice`");
 }
 
 int loadAttendanceCheckLogList(AttendanceCheckLog *checkLogList, int amount, int lectureID, time_t date)

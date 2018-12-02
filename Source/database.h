@@ -46,8 +46,11 @@ bool saveLecture(Lecture *lecture);
 bool removeLectureByID(int lectureID);
 bool loadLectureMemberList(Lecture *lecture);
 void saveLectureMemberList(Lecture *lecture);
+int loadLectureNotice(char noticeList[][512], int amount, int lectureID);
+bool saveLectureNotice(int lectureID, char *message);
 bool clearLecture();
 bool clearLectureMember();
+bool clearLectureNotice();
 
 int loadAttendanceCheckLogList(AttendanceCheckLog *checkLogList, int amount, int lectureID, time_t date);
 bool saveAttendanceCheckLog(AttendanceCheckLog *checkLog);
