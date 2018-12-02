@@ -27,4 +27,10 @@ typedef struct LectureInfo_t
 
 Lecture createLecture(int lectureID, char *lectureName, char *professorID);
 void buildLecture(Lecture *lecture, int lectureID, char *lectureName, char *professorID, time_t createDate);
+void buildLectureInfo(LectureInfo *lectureInfo, Lecture *lecture);
+
 void resetLecture(Lecture *lecture);
+void resetLectureInfo(LectureInfo *lectureInfo);
+
+bool lectureAddMember(Lecture *lecture, char *studentID);
+bool lectureRemoveMember(Lecture *lecture, char *studentID);
