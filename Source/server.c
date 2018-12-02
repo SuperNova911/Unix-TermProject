@@ -59,8 +59,8 @@ void chatSendMessage(int sender, char *message, UserInfo *userInfo);
 bool addOnlineUser(User *user, int socket);
 bool removeOnlineUserBySocket(int socket);
 bool removeOnlineUserByID(char *studentID);
-bool addLecture(Lecture *lecture);
-bool removeLectureByName(char *lectureName);
+bool addLectureInfo(Lecture *lecture);
+bool removeLectureInfoByName(char *lectureName);
 bool userEnterLecture(char *studentID, char *lectureName);
 bool userLeaveLecture(char *studentID, char *lectureName);
 bool isSameUserID(User *user, char *studentID);
@@ -72,6 +72,8 @@ LectureInfo *findLectureInfoByID(int lectureID, bool *result);
 void setErrorMessage(DataPack *dataPack, char *message);
 
 void disconnectUser(int socket);
+void loadLectureListFromDB();
+int getNextLectureID();
 
 
 int UserCount;
@@ -95,36 +97,22 @@ int main()
 
     atexit(onClose);
     initiateInterface();
-
     drawDefaultLayout();
 
-    LectureInfoList[0].lecture.lectureID = 1;
-    LectureInfoList[1].lecture.memberCount = 2;
-    strncpy(LectureInfoList[0].lecture.professorID, "201510743", sizeof(LectureInfoList[0].lecture.professorID));
-    strncpy(LectureInfoList[0].lecture.lectureName, "MyCustomClass", sizeof(LectureInfoList[0].lecture.lectureName));
-    strncpy(LectureInfoList[0].lecture.memberList[0], "201500000", sizeof(LectureInfoList[0].lecture.professorID));
-    strncpy(LectureInfoList[0].lecture.memberList[1], "201510743", sizeof(LectureInfoList[0].lecture.professorID));
-    time(&LectureInfoList[0].lecture.createDate);
-
-    LectureInfoList[1].lecture.lectureID = 2;
-    LectureInfoList[1].lecture.memberCount = 2;
-    strncpy(LectureInfoList[1].lecture.professorID, "12345", sizeof(LectureInfoList[1].lecture.professorID));
-    strncpy(LectureInfoList[1].lecture.lectureName, "UnixClass", sizeof(LectureInfoList[1].lecture.lectureName));
-    strncpy(LectureInfoList[1].lecture.memberList[1], "201500000", sizeof(LectureInfoList[1].lecture.professorID));
-    strncpy(LectureInfoList[1].lecture.memberList[1], "201510743", sizeof(LectureInfoList[1].lecture.professorID));
-    time(&LectureInfoList[1].lecture.createDate);
-    
-    LectureInfoList[2].lecture.lectureID = 3;
-    strncpy(LectureInfoList[2].lecture.professorID, "54321", sizeof(LectureInfoList[2].lecture.professorID));
-    strncpy(LectureInfoList[2].lecture.lectureName, "PrivateClass", sizeof(LectureInfoList[2].lecture.lectureName));
-    time(&LectureInfoList[2].lecture.createDate);
-
-    LectureCount = 3;
+    if (initializeDatabase() && connectToDatabase() == false)
+    {
+        printMessage(MessageWindow, "데이터베이스 초기화 실패");
+        getchar();
+        return 0;
+    }
+    createTable();
+    loadLectureListFromDB();
 
     initiateServer();
 
     async();
-    
+
+    closeDatabase();
     return 0;
 }
 
@@ -472,13 +460,9 @@ void lectureCreate(int sender, char *lectureName, UserInfo *userInfo)
         return;
     }
 
-    Lecture newLecture;
-    memset(&newLecture, 0, sizeof(Lecture));
-    strncpy(newLecture.professorID, userInfo->studentID, sizeof(newLecture.professorID));
-    strncpy(newLecture.lectureName, lectureName, sizeof(newLecture.lectureName));
-    time(&newLecture.createDate);
+    Lecture newLecture = createLecture(getNextLectureID(), lectureName, userInfo->studentID);
 
-    if (addLecture(&newLecture) == false)
+    if (addLectureInfo(&newLecture) == false)
     {
         setErrorMessage(&dataPack, "더 이상 강의를 개설할 수 없습니다");
         sendDataPack(sender, &dataPack);
@@ -487,11 +471,11 @@ void lectureCreate(int sender, char *lectureName, UserInfo *userInfo)
 
     if (saveLecture(&newLecture) == false)
     {
-        removeLectureByName(newLecture.lectureName);
+        removeLectureInfoByName(newLecture.lectureName);
         setErrorMessage(&dataPack, "강의를 개설하던 중 문제가 발생하였습니다");
         sendDataPack(sender, &dataPack);
         return;
-    }
+    }   
 
     dataPack.result = true;
     sendDataPack(sender, &dataPack);
@@ -510,9 +494,25 @@ void lectureRemove(int sender, char *lectureName, UserInfo *userInfo)
         return;
     }
 
-    if (removeLectureByName(lectureName) == false)
+    bool findResult;
+    LectureInfo *lectureInfo = findLectureInfoByName(lectureName, &findResult);
+    if (findResult == false)
     {
         setErrorMessage(&dataPack, "해당 이름이 일치하는 강의가 없습니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    if (removeLectureInfoByName(lectureName) == false)
+    {
+        setErrorMessage(&dataPack, "해당 이름이 일치하는 강의가 없습니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    if (removeLectureByID(lectureInfo->lecture.lectureID) == false)
+    {
+        setErrorMessage(&dataPack, "removeLectureByID 실패");
         sendDataPack(sender, &dataPack);
         return;
     }
@@ -596,19 +596,20 @@ void lectureRegister(int sender, char *lectureName, UserInfo *userInfo)
         }
     }
 
-    if ((lectureInfo->onlineUserCount + 1) == MAX_LECTURE_MEMBER)
+    if (lectureAddMember(&lectureInfo->lecture, userInfo->studentID) == false)
     {
         setErrorMessage(&dataPack, "강의가 가득찼습니다");
         sendDataPack(sender, &dataPack);
         return;
     }
 
-    // if (lecture_registerUser(lectureInfo->lecture.lectureID, userInfo->studentID) == false)
-    // {
-    //     setErrorMessage(&dataPack, "가입 요청 중 문제가 발생하였습니다");
-    //     sendDataPack(sender, &dataPack);
-    //     return;
-    // }
+    if (saveLecture(&lectureInfo->lecture) == false)
+    {
+        lectureRemoveMember(&lectureInfo->lecture, userInfo->studentID);
+        setErrorMessage(&dataPack, "DB에 저장 실패");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
 
     OnlineUser *onlineUser = findOnlineUserByID(userInfo->studentID, &findResult);
     if (findResult == false)
@@ -639,7 +640,20 @@ void lectureDeregister(int sender, char *lectureName, UserInfo *userInfo)
         return;
     }
 
-    // Do something
+    if (lectureRemoveMember(&lectureInfo->lecture, userInfo->studentID) == false)
+    {
+        setErrorMessage(&dataPack, "가입하지 않은 강의입니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    if (saveLecture(&lectureInfo->lecture) == false)
+    {
+        lectureRemoveMember(&lectureInfo->lecture, userInfo->studentID);
+        setErrorMessage(&dataPack, "DB에 저장 실패");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
 
     dataPack.result = true;
     sendDataPack(sender, &dataPack);
@@ -1022,6 +1036,13 @@ void chatSendMessage(int sender, char *message, UserInfo *userInfo)
             sendDataPack(lectureInfo->onlineUser[index]->socket, &dataPack);
         }
     }
+
+    ChatLog chatLog;
+    chatLog.lectureID = lectureInfo->lecture.lectureID;
+    strncpy(chatLog.userName, userInfo->userName, sizeof(chatLog.userName));
+    strncpy(chatLog.message, message, sizeof(chatLog.message));
+    time(&chatLog.date);
+    saveChatLog(&chatLog);
 }
 
 // 클라이언트에게 DataPack을 전송
@@ -1052,8 +1073,6 @@ bool sendDataPack(int receiver, DataPack *dataPack)
 
     return false;
 }
-
-
 
 bool addOnlineUser(User *user, int socket)
 {
@@ -1099,17 +1118,17 @@ bool removeOnlineUserByID(char *studentID)
     return false;
 }
 
-bool addLecture(Lecture *lecture)
+bool addLectureInfo(Lecture *lecture)
 {
     if ((LectureCount + 1) < MAX_LECTURE)
         return false;
     
-    memcpy(&LectureInfoList[LectureCount].lecture, lecture, sizeof(Lecture));
+    buildLectureInfo(&LectureInfoList[LectureCount], lecture);
     LectureCount++;
     return true;
 }
 
-bool removeLectureByName(char *lectureName)
+bool removeLectureInfoByName(char *lectureName)
 {
     for (int index = 0; index < LectureCount; index++)
     {
@@ -1132,7 +1151,16 @@ bool userEnterLecture(char *studentID, char *lectureName)
     if (findResult == false)
         return false;
 
-    if ((lectureInfo->onlineUserCount + 1) == MAX_LECTURE_MEMBER)
+    for (int index = 0; index < lectureInfo->onlineUserCount)
+    {
+        if (strcmp(lectureInfo->onlineUser[index].user.studentID, studentID) == 0)
+        {
+            userLeaveLecture(studentID, lectureName);
+            break;
+        }
+    }
+
+    if (lectureInfo->onlineUserCount >= MAX_LECTURE_MEMBER)
         return false;
 
     OnlineUser *onlineUser = findOnlineUserByID(studentID, &findResult);
@@ -1279,4 +1307,29 @@ void disconnectUser(int socket)
     }
 
     removeOnlineUserBySocket(socket);
+}
+
+void loadLectureListFromDB()
+{
+    Lecture lectureList[MAX_LECTURE];
+    LectureCount = loadLectureList(lectureList, MAX_LECTURE);
+
+    for (int index = 0; index < LectureCount; index++)
+    {
+        buildLectureInfo(&LectureInfoList[index], &lectureList[index]);
+    }
+}
+
+int getNextLectureID()
+{
+    int max = 1;
+    for (int index = 0; index < LectureCount; index++)
+    {
+        if (LectureInfoList[index].lectureID > max)
+        {
+            max = LectureInfoList[index].lectureID;
+        }
+    }
+
+    return max;
 }
