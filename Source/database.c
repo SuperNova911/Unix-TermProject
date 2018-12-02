@@ -41,15 +41,15 @@ void createTable()
 
 bool connectToDatabase()
 {
-	const char *host = "right.jbnu.ac.kr";
-	const char *user = "A201210927";
-	const char *password = "q1234";
-	const char *database = "A201210927";
-	unsigned int port = 0;
-	const char *socket = NULL;
-	unsigned long clientFlag = CLIENT_MULTI_STATEMENTS;
+	const char *HOST = "right.jbnu.ac.kr";
+	const char *USER = "A201210927";
+	const char *PASSWORD = "q1234";
+	const char *DATABASE = "A201210927";
+	const unsigned int PORT = 0;
+	const char *SOCKET = NULL;
+	const unsigned long CLIENT_FLAG = CLIENT_MULTI_STATEMENTS;
 
-	if (mysql_real_connect(Connection, host, user, password, database, port, socket, clientFlag) == NULL)
+	if (mysql_real_connect(Connection, HOST, USER, PASSWORD, DATABASE, PORT, SOCKET, CLIENT_FLAG) == NULL)
 	{
 		printError();
 		return false;
@@ -89,9 +89,9 @@ User loadUserByID(char *studentID, bool *dbResult)
 	}
 
 	MYSQL_ROW row;
-	while ((row = mysql_fetch_row(result)) == NULL)
+	while ((row = mysql_fetch_row(result)) != NULL)
 	{
-		user = buildUser(row[0], row[1], row[2], atoi(row[3]), atol(row[4]));
+		buildUser(&user, row[0], row[1], row[2], atoi(row[3]), atol(row[4]));
 		mysql_free_result(result);
 
 		*dbResult = true;
@@ -128,6 +128,7 @@ bool isUserMatch(char *studentID, char *hashedPassword)
 {
 	char query[512];
 	sprintf(query, "SELECT * FROM `User` WHERE studentID = '%s' AND hashedPassword = '%s'", studentID, hashedPassword);
+	executeQuery(query);
 
 	MYSQL_RES *result;
 	result = mysql_store_result(Connection);
@@ -138,7 +139,7 @@ bool isUserMatch(char *studentID, char *hashedPassword)
 	}
 
 	MYSQL_ROW row;
-	while ((row = mysql_fetch_row(result)) == NULL)
+	while ((row = mysql_fetch_row(result)) != NULL)
 	{
 		return true;
 	}
@@ -165,7 +166,7 @@ Lecture loadLectureByName(char *lectureName, bool *dbResult)
 	}
 
 	MYSQL_ROW row;
-	while ((row = mysql_fetch_row(result)) == NULL)
+	while ((row = mysql_fetch_row(result)) != NULL)
 	{
 		buildLecture(&lecture, atoi(row[0]), row[1], row[2], atol(row[4]));
 		loadLectureMemberList(&lecture);
@@ -197,8 +198,9 @@ int loadLectureList(Lecture *lectureList, int amount)
 	}
 
 	MYSQL_ROW row;
-	while (((row = mysql_fetch_row(result)) == NULL) && index < amount)
+	while (((row = mysql_fetch_row(result)) != NULL) && index < amount)
 	{
+		resetLecture(&lectureList[index]);
 		buildLecture(&lectureList[index], atoi(row[0]), row[1], row[2], atol(row[4]));
 		loadLectureMemberList(&lectureList[index]);
 		index++;
@@ -243,7 +245,7 @@ bool loadLectureMemberList(Lecture *lecture)
 	}
 
 	MYSQL_ROW row;
-	for (int index = 0; ((row = mysql_fetch_row(result)) == NULL) && lecture->memberCount < MAX_LECTURE_MEMBER; index++)
+	for (int index = 0; ((row = mysql_fetch_row(result)) != NULL) && lecture->memberCount < MAX_LECTURE_MEMBER; index++)
 	{
 		strncpy(lecture->memberList[index], row[1], sizeof(lecture->memberList[index]));
 		lecture->memberCount++;
@@ -278,7 +280,7 @@ int loadAttendanceCheckLogList(AttendanceCheckLog *checkLogList, int amount, int
 	const int SEARCH_RANGE = 12 * 60 * 60;		// 12시간
 
 	char query[512];
-	sprintf(query, "DELETE FROM `AttendanceCheckLog` WHERE lectureID = '%d' AND checkDate BETWEEN '%ld' AND '%ld' LIMIT %d", 
+	sprintf(query, "SELECT * FROM `AttendanceCheckLog` WHERE lectureID = '%d' AND checkDate BETWEEN '%ld' AND '%ld' LIMIT %d", 
 		lectureID, date - SEARCH_RANGE, date + SEARCH_RANGE, amount);
 
 	executeQuery(query);
@@ -294,7 +296,7 @@ int loadAttendanceCheckLogList(AttendanceCheckLog *checkLogList, int amount, int
 	}
 
 	MYSQL_ROW row;
-	while (((row = mysql_fetch_row(result)) == NULL) && index < amount)
+	while (((row = mysql_fetch_row(result)) != NULL) && index < amount)
 	{
 		checkLogList[index].lectureID = atoi(row[0]);
 		strncpy(checkLogList[index].studentID, row[1], sizeof(checkLogList[index].studentID));
@@ -312,7 +314,7 @@ int loadAttendanceCheckLogList(AttendanceCheckLog *checkLogList, int amount, int
 bool saveAttendanceCheckLog(AttendanceCheckLog *checkLog)
 {
 	char query[1024];
-	sprintf(query, "REPLACE INTO `AttendanceCheckLog` (`lectureID`, `studentID`, `IP`, `quizAnswer`, `checkDate`) VALUES ('%d', '%s', '%s', '%s', '%ld')",
+	sprintf(query, "INSERT INTO `AttendanceCheckLog` (`lectureID`, `studentID`, `IP`, `quizAnswer`, `checkDate`) VALUES ('%d', '%s', '%s', '%s', '%ld')",
 		checkLog->lectureID, checkLog->studentID, checkLog->IP, checkLog->quizAnswer, checkLog->checkDate);
 	
 	return executeQuery(query);
@@ -351,7 +353,7 @@ int loadChatLogList(ChatLog *chatLogList, int amount, int lectureID)
 	}
 
 	MYSQL_ROW row;
-	while (((row = mysql_fetch_row(result)) == NULL) && index < amount)
+	while (((row = mysql_fetch_row(result)) != NULL) && index < amount)
 	{
 		chatLogList[index].lectureID = atoi(row[0]);
 		strncpy(chatLogList[index].userName, row[1], sizeof(chatLogList[index].userName));
@@ -368,7 +370,7 @@ int loadChatLogList(ChatLog *chatLogList, int amount, int lectureID)
 bool saveChatLog(ChatLog *chatLog)
 {
 	char query[1024];
-	sprintf(query, "REPLACE INTO `ChatLog` (`lectureID`, `userName`, `message`, `date`) VALUES ('%d', '%s', '%s', '%ld')",
+	sprintf(query, "INSERT INTO `ChatLog` (`lectureID`, `userName`, `message`, `date`) VALUES ('%d', '%s', '%s', '%ld')",
 		chatLog->lectureID, chatLog->userName, chatLog->message, chatLog->date);
 	
 	return executeQuery(query);
