@@ -1,6 +1,8 @@
 #include "database.h"
 #include "dataPack.h"
 #include "interface.h"
+#include "user.h"
+#include "lecture.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -22,23 +24,6 @@
 #define MAX_CLIENT 64
 #define MAX_LECTURE 16
 
-
-typedef struct OnlineUser_t
-{
-    int socket;
-    int currentLectureID;
-    bool onChat;
-    User user;
-} OnlineUser;
-
-typedef struct LectureInfo_t
-{
-    int onlineUserCount;
-    Lecture lecture;
-    OnlineUser *onlineUser[MAX_LECTURE_MEMBER];
-    bool attendanceActive;
-    time_t attendanceEndtime;
-} LectureInfo;
 
 void initializeGlobalVariable();
 
@@ -85,7 +70,6 @@ OnlineUser *findOnlineUserBySocket(int socket, bool *result);
 LectureInfo *findLectureInfoByName(char *lectureName, bool *result);
 LectureInfo *findLectureInfoByID(int lectureID, bool *result);
 void setErrorMessage(DataPack *dataPack, char *message);
-bool hasPermission(UserInfo *userInfo);
 
 void disconnectUser(int socket);
 
@@ -385,15 +369,16 @@ void userLogin(int sender, char *studentID, char *password)
     resetDataPack(&dataPack);
     dataPack.command = USER_LOGIN_RESPONSE;
 
-    if (loginUser(studentID, password) == false)
+    if (isUserMatch(studentID, password) == false)
     {
         setErrorMessage(&dataPack, "학번 또는 비밀번호가 틀립니다");
         sendDataPack(sender, &dataPack);
         return;
     }
 
-    User user;
-    if (loadUserByID(&user, studentID) == false)
+    bool dbResult;
+    User user = loadUserByID(studentID, &dbResult);
+    if (dbResult == false)
     {
         setErrorMessage(&dataPack, "사용자 정보를 불러올 수 없습니다");
         sendDataPack(sender, &dataPack);
@@ -480,7 +465,7 @@ void lectureCreate(int sender, char *lectureName, UserInfo *userInfo)
     resetDataPack(&dataPack);
     dataPack.command = LECTURE_CREATE_RESPONSE;
 
-    if (hasPermission(userInfo) == false)
+    if (hasPermission(userInfo->role) == false)
     {
         setErrorMessage(&dataPack, "강의를 개설할 권한이 없습니다");
         sendDataPack(sender, &dataPack);
@@ -500,7 +485,7 @@ void lectureCreate(int sender, char *lectureName, UserInfo *userInfo)
         return;
     }
 
-    if (createLecture(&newLecture) == false)
+    if (saveLecture(&newLecture) == false)
     {
         removeLectureByName(newLecture.lectureName);
         setErrorMessage(&dataPack, "강의를 개설하던 중 문제가 발생하였습니다");
@@ -518,7 +503,7 @@ void lectureRemove(int sender, char *lectureName, UserInfo *userInfo)
     resetDataPack(&dataPack);
     dataPack.command = LECTURE_REMOVE_RESPONSE;
 
-    if (hasPermission(userInfo) == false)
+    if (hasPermission(userInfo->role) == false)
     {
         setErrorMessage(&dataPack, "강의를 삭제할 권한이 없습니다");
         sendDataPack(sender, &dataPack);
@@ -618,12 +603,12 @@ void lectureRegister(int sender, char *lectureName, UserInfo *userInfo)
         return;
     }
 
-    if (lecture_registerUser(lectureInfo->lecture.lectureID, userInfo->studentID) == false)
-    {
-        setErrorMessage(&dataPack, "가입 요청 중 문제가 발생하였습니다");
-        sendDataPack(sender, &dataPack);
-        return;
-    }
+    // if (lecture_registerUser(lectureInfo->lecture.lectureID, userInfo->studentID) == false)
+    // {
+    //     setErrorMessage(&dataPack, "가입 요청 중 문제가 발생하였습니다");
+    //     sendDataPack(sender, &dataPack);
+    //     return;
+    // }
 
     OnlineUser *onlineUser = findOnlineUserByID(userInfo->studentID, &findResult);
     if (findResult == false)
@@ -666,7 +651,7 @@ void attendanceStart(int sender, char *duration, char *answer, char *quiz, UserI
     resetDataPack(&dataPack);
     dataPack.command = ATTENDANCE_START_RESPONSE;
 
-    if (hasPermission(userInfo) == false)
+    if (hasPermission(userInfo->role) == false)
     {
         setErrorMessage(&dataPack, "권한이 없습니다");
         sendDataPack(sender, &dataPack);
@@ -716,7 +701,7 @@ void attendanceStop(int sender, UserInfo *userInfo)
     resetDataPack(&dataPack);
     dataPack.command = ATTNEDANCE_STOP_RESPONSE;
 
-    if (hasPermission(userInfo) == false)
+    if (hasPermission(userInfo->role) == false)
     {
         setErrorMessage(&dataPack, "권한이 없습니다");
         sendDataPack(sender, &dataPack);
@@ -757,7 +742,7 @@ void attendanceExtend(int sender, char *duration, UserInfo *userInfo)
     resetDataPack(&dataPack);
     dataPack.command = ATTNEDANCE_EXTEND_RESPONSE;
 
-    if (hasPermission(userInfo) == false)
+    if (hasPermission(userInfo->role) == false)
     {
         setErrorMessage(&dataPack, "권한이 없습니다");
         sendDataPack(sender, &dataPack);
@@ -813,7 +798,7 @@ void attendanceResult(int sender, UserInfo *userInfo)
     resetDataPack(&dataPack);
     dataPack.command = ATTENDANCE_RESULT_RESPONSE;
 
-    if (hasPermission(userInfo) == false)
+    if (hasPermission(userInfo->role) == false)
     {
         setErrorMessage(&dataPack, "권한이 없습니다");
         sendDataPack(sender, &dataPack);
@@ -856,7 +841,7 @@ void attendanceCheck(int sender, char *HWID, char *answer, UserInfo *userInfo)
     resetDataPack(&dataPack);
     dataPack.command = ATTENDANCE_CHECK_RESPONSE;
 
-    if (userInfo->role != Student)
+    if (userInfo->role != USER_STUDENT)
     {
         setErrorMessage(&dataPack, "출석 체크 대상이 아닙니다");
         sendDataPack(sender, &dataPack);
@@ -1265,11 +1250,6 @@ void setErrorMessage(DataPack *dataPack, char *message)
 {
     dataPack->result = false;
     strncpy(dataPack->message, message, sizeof(dataPack->message));
-}
-
-bool hasPermission(UserInfo *userInfo)
-{
-    return ((userInfo->role == Admin) || (userInfo->role == Professor)) ? true : false;
 }
 
 void disconnectUser(int socket)
