@@ -1,229 +1,388 @@
 #include "database.h"
 
-bool isItUser;                          //유저들의 데이터베이스인지 확인하는 변수
-bool isItLecture;                       //강의들의 데이터베이스인지 확인하는 변수.
-bool isItAttendanceCheckLog;            //출석체크 기록 데이터베이스인지 확인하는 변수.
-bool isItChatLog;                       //채팅 기록 데이터베이스인지 확인하는 변수.
+MYSQL *Connection; 
 
-sqlite3 *dbUser;   
-sqlite3 *dbLecture;
-sqlite3 *dbAttendanceCheckLog;
-sqlite3 *dbChatLog;
-char *err_msg = 0;                      //에러메시지 처리변수.
-
-bool createNewDatabase()
+void printError()
 {
-	if(isItUser == true)
-    {
-        sqlite3 *dbUser;                            
-	    int rc = sqlite3_open("User.db", &dbUser);
+	printf("[ERROR] code: '%d', message: '%s'\n", mysql_errno(Connection), mysql_error(Connection));
+}
 
-    	if(rc != SQLITE_OK)
-    	{
-	    	fprintf(stderr,"Cannot open database : %s\n", sqlite3_errmsg(dbUser));
-	    	sqlite3_close(dbUser);
+bool executeQuery(char *query)
+{
+	if (mysql_query(Connection, query) != 0)
+	{
+		printError();
+		return false;
+	}
 
-	    	return false;
-	    }
+	return true;
+}
 
-	    char *sql =	"DROP TABLE IF EXISTS User;"
-			        "CREATE TABLE User (studentID TEXT, hashedPassword TEXT, userName TEXT, role INT, registerDate INT);";   //role과 Date는 INT로 임시로 잡음
-	    printf("%s\n",sql);
-        rc = sqlite3_exec(dbUser,sql,0,0,&err_msg);
-	
-        if(rc != SQLITE_OK)
-        {
-	       fprintf(stderr,"SQL Error: %s\n", err_msg);
-	       sqlite3_free(err_msg);
-	       sqlite3_close(dbUser);
+bool initializeDatabase()
+{
+	Connection = mysql_init(NULL);
+	if (Connection == NULL)
+	{
+		printf("Insufficient memory\n");
+		return false;
+	}
 
-	       return false;
-	    }
-    }
-    if(isItLecture == true)
-    {
-        sqlite3 *dbLecture;
-        int rc = sqlite3_open("Lecture.db", &dbLecture);
+	return true;
+}
 
-    	if(rc != SQLITE_OK)
-    	{
-	    	fprintf(stderr,"Cannot open database : %s\n", sqlite3_errmsg(dbLecture));
-	    	sqlite3_close(dbLecture);
+void createTable()
+{
+	executeQuery("CREATE TABLE IF NOT EXISTS `User` (`studentID` VARCHAR(16) NOT NULL, `hashedPassword` VARCHAR(64) NOT NULL, `userName` VARCHAR(16) NOT NULL, `role` INT NOT NULL, `registerDate` BIGINT NOT NULL, PRIMARY KEY (`studentID`))");
+	executeQuery("CREATE TABLE IF NOT EXISTS `Lecture` (`lectureID` INT NOT NULL, `lectureName` VARCHAR(64) NOT NULL, `professorID` VARCHAR(16) NOT NULL, `memberCount` INT NOT NULL, `createDate` BIGINT NOT NULL, PRIMARY KEY (`lectureID`))");
+	executeQuery("CREATE TABLE IF NOT EXISTS `LectureMember` (`lectureID` INT NOT NULL, `studentID` VARCHAR(16) NOT NULL)");
+	executeQuery("CREATE TABLE IF NOT EXISTS `AttendanceCheckLog` (`lectureID` INT NOT NULL, `studentID` VARCHAR(16) NOT NULL, `IP` VARCHAR(16) NOT NULL, `quizAnswer` VARCHAR(512) NOT NULL, `checkDate` BIGINT NOT NULL)");
+	executeQuery("CREATE TABLE IF NOT EXISTS `ChatLog` (`lectureID` INT NOT NULL, `userName` VARCHAR(16) NOT NULL, `message` VARCHAR(512) NOT NULL, `date` BIGINT NOT NULL)");
+}
 
-	    	return false;
-	    }
+bool connectToDatabase()
+{
+	const char *host = "right.jbnu.ac.kr";
+	const char *user = "A201210927";
+	const char *password = "q1234";
+	const char *database = "A201210927";
+	unsigned int port = 0;
+	const char *socket = NULL;
+	unsigned long clientFlag = CLIENT_MULTI_STATEMENTS;
 
-	    char *sql =	"DROP TABLE IF EXISTS Lecture;"
-		        	"CREATE TABLE Lecture (lectureID INT, professorID INT, lectureName TEXT, createDate INT );";        //미완성(인자값하나 못넣음)
-                        
-        rc = sqlite3_exec(dbLecture,sql,0,0,&err_msg);
-	
-        if(rc != SQLITE_OK)
-        {
-	       fprintf(stderr,"SQL Error: %s\n", err_msg);
-	       sqlite3_free(err_msg);
-	       sqlite3_close(dbLecture);
+	if (mysql_real_connect(Connection, host, user, password, database, port, socket, clientFlag) == NULL)
+	{
+		printError();
+		return false;
+	}
 
-	       return false;
-	    }
-    }
-    if(isItAttendanceCheckLog == true)
-    {
-        sqlite3 *dbAttendanceCheckLog;
-        int rc = sqlite3_open("AttendanceCheckLog.db", &dbAttendanceCheckLog);
-
-    	if(rc != SQLITE_OK)
-    	{
-	    	fprintf(stderr,"Cannot open database : %s\n", sqlite3_errmsg(dbAttendanceCheckLog));
-	    	sqlite3_close(dbAttendanceCheckLog);
-
-	    	return false;
-	    }
-
-	    char *sql =	"DROP TABLE IF EXISTS AttendanceCheckLog;"
-		        	"CREATE TABLE AttendanceCheckLog (lectureID INT, studentID INT, IP TEXT, quizAnswer TEXT, checkDate INT );"; 
-                        
-        rc = sqlite3_exec(dbAttendanceCheckLog,sql,0,0,&err_msg);
-	
-        if(rc != SQLITE_OK)
-        {
-	       fprintf(stderr,"SQL Error: %s\n", err_msg);
-	       sqlite3_free(err_msg);
-	       sqlite3_close(dbAttendanceCheckLog);
-
-	       return false;
-	    }
-    }
-    if(isItChatLog == true)
-    {
-        sqlite3 *dbChatLog;
-        int rc = sqlite3_open("ChatLog.db", &dbChatLog);
-
-    	if(rc != SQLITE_OK)
-    	{
-	    	fprintf(stderr,"Cannot open database : %s\n", sqlite3_errmsg(dbChatLog));
-	    	sqlite3_close(dbChatLog);
-
-	    	return false;
-	    }
-
-	    char *sql =	"DROP TABLE IF EXISTS ChatLog;"
-		        	"CREATE TABLE ChatLog (lectureID INT, userName TEXT, message TEXT, date INT );";
-                        
-        rc = sqlite3_exec(dbChatLog,sql,0,0,&err_msg);
-	
-        if(rc != SQLITE_OK)
-        {
-	       fprintf(stderr,"SQL Error: %s\n", err_msg);
-	       sqlite3_free(err_msg);
-	       sqlite3_close(dbChatLog);
-
-	       return false;
-	    }
-    }
-    return true;
+	return true;
 }
 
 bool closeDatabase()
 {
-    if(isItUser == true)
-    {
-        sqlite3_close(dbUser);
-        return true;
-    }
-
-    if(isItLecture == true)
-    {
-        sqlite3_close(dbLecture);
-        return true;
-    }
-
-    if(isItAttendanceCheckLog == true)
-    {
-        sqlite3_close(dbAttendanceCheckLog);
-        return true;
-    }
-
-    if(isItChatLog == true)
-    {
-        sqlite3_close(dbChatLog);
-        return true;
-    }
-
-    printf("데이터베이스를 정상적으로 닫지 못했습니다. 치명적 오류발생!\n");
-    exit(1);
-    return false;
-}
-
-//새로추가함 11/24 15:25 p.m
-bool registerUser(User *user)                                  // DB에 새로운 사용자 정보 저장
-{
-    char strSQL[500];                                       // 명령문을 담을 임시 char 배열
-    char strRole[10];
-    char strRegisterDate[50];
-
-
-    sprintf(strRole, "%d", user->role);                         //정수형을 char형으로 변환
-    sprintf(strRegisterDate, "%d", user->registerDate);         //정수형을 char형으로 변환
- 
-    strcpy(strSQL,"INSERT INTO User VALUES(");
-
-	strcat(strSQL,"'");
-    strcat(strSQL,user->studentID);	
-	strcat(strSQL,"'");
-	strcat(strSQL,",");
-
-	strcat(strSQL,"'");
-	strcat(strSQL,user->hashedPassword);
-	strcat(strSQL,"'");
-    strcat(strSQL,",");
-
-	strcat(strSQL,"'");
-	strcat(strSQL,user->userName);
-	strcat(strSQL,"'");
-   	 strcat(strSQL,",");
-
-	//strcat(strSQL,"'");    
-    strcat(strSQL,strRole);
-	//strcat(strSQL,"'");
-	strcat(strSQL,",");
-    
-	//strcat(strSQL,"'");
-   	strcat(strSQL,strRegisterDate);
-	//strcat(strSQL,"'");
-	strcat(strSQL,");");
-
-	printf("%s\n",strSQL);                                                              //테스트용, 잘 출력되나
-
-	//char *ssql = "INSERT INTO User VALUES('201210927','ZZZZZZ','장진성',2,3);";
-
-	int rc = sqlite3_exec(dbUser,strSQL,0,0,&err_msg);                                  //지금 여기서 막힘. 18:42 p.m 11/24
-	if(rc != SQLITE_OK)
+	if (Connection == NULL)
 	{
-		fprintf(stderr,"SQL error: %s\n", err_msg);
-
-		sqlite3_free(err_msg);
-		sqlite3_close(dbUser);
-
+		fprintf(stderr, "closeDatabase: Already closed\n");
 		return false;
 	}
 
-    return true;
+	mysql_close(Connection);
+	return true;
 }
 
-int main(void)                                                                           //테스트용.
+User loadUserByID(char *studentID, bool *dbResult)
 {
-	User u1;
-	strcpy(u1.userName, "장진성");
-   	strcpy(u1.studentID, "201210927");
-    strcpy(u1.hashedPassword, "abcdefg");
-   	u1.role = 1;
-   	u1.registerDate = 1234;
+	char query[512];
+	sprintf(query, "SELECT * FROM `User` WHERE studentID = '%s'", studentID);
+	executeQuery(query);
 
-	isItUser = true;
-	createNewDatabase();
-	registerUser(&u1);
-	closeDatabase();
+	User user;
+	resetUser(&user);
 
-	return 0;
+	MYSQL_RES *result;
+	result = mysql_store_result(Connection);
+	if (result == NULL)
+	{
+		printError();
+		*dbResult = false;
+		return user;
+	}
+
+	MYSQL_ROW row;
+	while ((row = mysql_fetch_row(result)) == NULL)
+	{
+		user = buildUser(row[0], row[1], row[2], atoi(row[3]), atol(row[4]));
+		mysql_free_result(result);
+
+		*dbResult = true;
+		return user;
+	}
+
+	*dbResult = false;
+	return user;
+}
+
+bool saveUser(User *user)
+{
+	char query[512];
+	sprintf(query, "REPLACE INTO `User` (`studentID`, `hashedPassword`, `userName`, `role`, `registerDate`) VALUES ('%s', '%s', '%s', '%d', '%ld')",
+		user->studentID, user->hashedPassword, user->userName, user->role, user->registerDate);
+	
+	return executeQuery(query);
+}
+
+bool removeUser(char *studentID)
+{
+	char query[512];
+	sprintf(query, "DELETE FROM `User` WHERE studentID = '%s'", studentID);
+
+	return executeQuery(query);
+}
+
+bool clearUser()
+{
+	return executeQuery("DELETE FROM `User`");
+}
+
+bool isUserMatch(char *studentID, char *hashedPassword)
+{
+	char query[512];
+	sprintf(query, "SELECT * FROM `User` WHERE studentID = '%s' AND hashedPassword = '%s'", studentID, hashedPassword);
+
+	MYSQL_RES *result;
+	result = mysql_store_result(Connection);
+	if (result == NULL)
+	{
+		printError();
+		return false;
+	}
+
+	MYSQL_ROW row;
+	while ((row = mysql_fetch_row(result)) == NULL)
+	{
+		return true;
+	}
+
+	return false;
+}
+
+Lecture loadLectureByName(char *lectureName, bool *dbResult)
+{
+	char query[512];
+	sprintf(query, "SELECT * FROM `Lecture` WHERE lectureName = '%s'", lectureName);
+	executeQuery(query);
+
+	Lecture lecture;
+	resetLecture(&lecture);
+
+	MYSQL_RES *result;
+	result = mysql_store_result(Connection);
+	if (result == NULL)
+	{
+		printError();
+		*dbResult = false;
+		return lecture;
+	}
+
+	MYSQL_ROW row;
+	while ((row = mysql_fetch_row(result)) == NULL)
+	{
+		buildLecture(&lecture, atoi(row[0]), row[1], row[2], atol(row[4]));
+		loadLectureMemberList(&lecture);
+
+		mysql_free_result(result);
+
+		*dbResult = true;
+		return lecture;
+	}
+
+	*dbResult = false;
+	return lecture;
+}
+
+int loadLectureList(Lecture *lectureList, int amount)
+{
+	char query[512];
+	sprintf(query, "SELECT * FROM `Lecture` LIMIT %d", amount);
+	executeQuery(query);
+
+	int index = 0;
+
+	MYSQL_RES *result;
+	result = mysql_store_result(Connection);
+	if (result == NULL)
+	{
+		printError();
+		return index;
+	}
+
+	MYSQL_ROW row;
+	while (((row = mysql_fetch_row(result)) == NULL) && index < amount)
+	{
+		buildLecture(&lectureList[index], atoi(row[0]), row[1], row[2], atol(row[4]));
+		loadLectureMemberList(&lectureList[index]);
+		index++;
+	}
+
+	mysql_free_result(result);
+	return index;
+}
+
+bool saveLecture(Lecture *lecture)
+{
+	char query[512];
+	sprintf(query, "REPLACE INTO `Lecture` (`lectureID`, `lectureName`, `professorID`, `memberCount`, `createDate`) VALUES ('%d', '%s', '%s', '%d', '%ld')",
+		lecture->lectureID, lecture->lectureName, lecture->professorID, lecture->memberCount, lecture->createDate);
+	
+	saveLectureMemberList(lecture);
+	
+	return executeQuery(query);
+}
+
+bool removeLectureByID(int lectureID)
+{
+	char query1[512], query2[512];
+	sprintf(query1, "DELETE FROM `Lecture` WHERE lectureID = '%d'", lectureID);
+	sprintf(query2, "DELETE FROM `LectureMember` WHERE lectureID = '%d'", lectureID);
+
+	return executeQuery(query1) && executeQuery(query2);
+}
+
+bool loadLectureMemberList(Lecture *lecture)
+{
+	char query[512];
+	sprintf(query, "SELECT * FROM `LectureMember` WHERE lectureID = '%d'", lecture->lectureID);
+	executeQuery(query);
+
+	MYSQL_RES *result;
+	result = mysql_store_result(Connection);
+	if (result == NULL)
+	{
+		printError();
+		return false;
+	}
+
+	MYSQL_ROW row;
+	for (int index = 0; ((row = mysql_fetch_row(result)) == NULL) && lecture->memberCount < MAX_LECTURE_MEMBER; index++)
+	{
+		strncpy(lecture->memberList[index], row[1], sizeof(lecture->memberList[index]));
+		lecture->memberCount++;
+	}
+
+	return true;
+}
+
+void saveLectureMemberList(Lecture *lecture)
+{
+	char query[512];
+	for (int index = 0; index < lecture->memberCount; index++)
+	{
+		sprintf(query, "REPLACE INTO `LectureMember` (`lectureID`, `studentID`) VALUES ('%d', '%s')",
+			lecture->lectureID, lecture->memberList[index]);
+		executeQuery(query);
+	}
+}
+
+bool clearLecture()
+{
+	return executeQuery("DELETE FROM `Lecture`");
+}
+
+bool clearLectureMember()
+{
+	return executeQuery("DELETE FROM `LectureMember`");
+}
+
+int loadAttendanceCheckLogList(AttendanceCheckLog *checkLogList, int amount, int lectureID, time_t date)
+{
+	const int SEARCH_RANGE = 12 * 60 * 60;		// 12시간
+
+	char query[512];
+	sprintf(query, "DELETE FROM `AttendanceCheckLog` WHERE lectureID = '%d' AND checkDate BETWEEN '%ld' AND '%ld' LIMIT %d", 
+		lectureID, date - SEARCH_RANGE, date + SEARCH_RANGE, amount);
+
+	executeQuery(query);
+
+	int index = 0;
+
+	MYSQL_RES *result;
+	result = mysql_store_result(Connection);
+	if (result == NULL)
+	{
+		printError();
+		return index;
+	}
+
+	MYSQL_ROW row;
+	while (((row = mysql_fetch_row(result)) == NULL) && index < amount)
+	{
+		checkLogList[index].lectureID = atoi(row[0]);
+		strncpy(checkLogList[index].studentID, row[1], sizeof(checkLogList[index].studentID));
+		strncpy(checkLogList[index].IP, row[2], sizeof(checkLogList[index].IP));
+		strncpy(checkLogList[index].quizAnswer, row[3], sizeof(checkLogList[index].quizAnswer));
+		checkLogList[index].checkDate = atol(row[4]);
+
+		index++;
+	}
+
+	mysql_free_result(result);
+	return index;
+}
+
+bool saveAttendanceCheckLog(AttendanceCheckLog *checkLog)
+{
+	char query[1024];
+	sprintf(query, "REPLACE INTO `AttendanceCheckLog` (`lectureID`, `studentID`, `IP`, `quizAnswer`, `checkDate`) VALUES ('%d', '%s', '%s', '%s', '%ld')",
+		checkLog->lectureID, checkLog->studentID, checkLog->IP, checkLog->quizAnswer, checkLog->checkDate);
+	
+	return executeQuery(query);
+}
+
+bool removeAttendanceCheckLog(int lectureID, time_t date)
+{
+	const int SEARCH_RANGE = 12 * 60 * 60;		// 12시간
+
+	char query[512];
+	sprintf(query, "DELETE FROM `AttendanceCheckLog` WHERE lectureID = '%d' AND checkDate BETWEEN '%ld' AND '%ld'", 
+		lectureID, date - SEARCH_RANGE, date + SEARCH_RANGE);
+
+	return executeQuery(query);
+}
+
+bool clearAttendanceCheckLog()
+{
+	return executeQuery("DELETE FROM `AttendanceCheckLog`");
+}
+
+int loadChatLogList(ChatLog *chatLogList, int amount, int lectureID)
+{
+	char query[512];
+	sprintf(query, "SELECT * FROM `ChatLog` WHERE lectureID = '%d' LIMIT %d", lectureID, amount);
+	executeQuery(query);
+
+	int index = 0;
+
+	MYSQL_RES *result;
+	result = mysql_store_result(Connection);
+	if (result == NULL)
+	{
+		printError();
+		return index;
+	}
+
+	MYSQL_ROW row;
+	while (((row = mysql_fetch_row(result)) == NULL) && index < amount)
+	{
+		chatLogList[index].lectureID = atoi(row[0]);
+		strncpy(chatLogList[index].userName, row[1], sizeof(chatLogList[index].userName));
+		strncpy(chatLogList[index].message, row[2], sizeof(chatLogList[index].message));
+		chatLogList[index].date = atol(row[3]);
+
+		index++;
+	}
+
+	mysql_free_result(result);
+	return index;
+}
+
+bool saveChatLog(ChatLog *chatLog)
+{
+	char query[1024];
+	sprintf(query, "REPLACE INTO `ChatLog` (`lectureID`, `userName`, `message`, `date`) VALUES ('%d', '%s', '%s', '%ld')",
+		chatLog->lectureID, chatLog->userName, chatLog->message, chatLog->date);
+	
+	return executeQuery(query);
+}
+
+bool removeChatLog(int lectureID)
+{
+	char query[512];
+	sprintf(query, "DELETE FROM `ChatLog` WHERE lectureID = '%d'", lectureID);
+
+	return executeQuery(query);
+}
+
+bool clearChatLog()
+{
+	return executeQuery("DELETE FROM `ChatLog`");
 }

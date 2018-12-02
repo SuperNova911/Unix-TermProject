@@ -1,10 +1,7 @@
-#include <stdbool.h>
+#pragma once
 
-enum UserRole
-{
-    None = 0,
-    Admin, Student, Professor
-};
+#include "user.h"
+#include <stdbool.h>
 
 enum Command
 {
@@ -22,13 +19,6 @@ enum Command
     ATTENDANCE_START_RESPONSE, ATTNEDANCE_STOP_RESPONSE, ATTNEDANCE_EXTEND_RESPONSE, ATTENDANCE_RESULT_RESPONSE, ATTENDANCE_CHECK_RESPONSE,
     CHAT_ENTER_RESPONSE, CHAT_LEAVE_RESPONSE, CHAT_USER_LIST_RESPONSE, CHAT_SEND_MESSAGE_RESPONSE,
 };
-
-typedef struct UserInfo_t
-{
-    enum UserRole role;
-    char userName[16];
-    char studentID[16];
-} UserInfo;
 
 typedef struct DataPack_t
 {

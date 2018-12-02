@@ -3,12 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-const char *UserRoleString[4] = 
-{
-    "None",
-    "Admin", "Student", "Professor"
-};
-
 const char *CommandString[37] = 
 {
     "NONE",
