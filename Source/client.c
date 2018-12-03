@@ -5,6 +5,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,6 +17,7 @@
 #include <sys/stat.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/types.h>
 
 #define SERVER_PORT 10743
@@ -30,6 +32,7 @@ struct CurrentLectureInfo_t
 {
     int lectureID;
     char lectureName[64];
+    LectureStatusPack statusPack;
 } CurrentLectureInfo;
 
 void initializeGlobalVariable();
@@ -51,14 +54,21 @@ void receiveUserCommand();
 void updateLayoutByStatus();
 void updateCommandByStatus();
 void updateInputByStatus();
+void updateLectureStatus();
 void changeClientStatus(enum ClientStatus status);
 
 bool receiveArgumentComplete();
 void resetArgument();
 void setArgumentGuide(char *guide1, char *guide2, char *guide3, char *guide4, char *guide5);
+void initializeTimer();
 
 extern const char *UserRoleString[4];
 extern const char *CommandString[37];
+
+char *ClientStatusString[6] = 
+{
+    "기본", "로그인", "강의 브라우저", "강의실 로비", "강의 대화", "출석체크 관리 페이지"
+};
 
 // 인터페이스
 extern WINDOW *StatusWindow;
@@ -104,6 +114,9 @@ int main()
         printMessage(MessageWindow, "Try connect to server...\n");
         sleep(3);
     }
+
+    sigset(SIGALRM, updateLectureStatus);
+    initializeTimer();
 
     changeClientStatus(Login);
 
@@ -266,14 +279,14 @@ bool composeDataPack(enum Command command)
     switch (dataPack.command)
     {
         case USER_LOGIN_REQUEST:
-            buildDataPack(&dataPack, Arguments[0], Arguments[1], NULL, NULL, NULL);
+            buildDataPack(&dataPack, Arguments[0], Arguments[1], NULL);
             break;
         
         case USER_LOGOUT_REQUEST:
             break;
 
         case USER_REGISTER_REQUEST:
-            buildDataPack(&dataPack, Arguments[0], Arguments[1], NULL, NULL, NULL);
+            buildDataPack(&dataPack, Arguments[0], Arguments[1], NULL);
             UserInfo userInfo = buildUserInfo(Arguments[0], Arguments[2], USER_STUDENT);
             memcpy(&dataPack.userInfo, &userInfo, sizeof(UserInfo));
 
@@ -281,54 +294,58 @@ bool composeDataPack(enum Command command)
             break;
         
         case LECTURE_CREATE_REQUEST:
-            buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, NULL);
+            buildDataPack(&dataPack, Arguments[0], NULL, NULL);
             break;
         
         case LECTURE_REMOVE_REQUEST:
-            buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, NULL);
+            buildDataPack(&dataPack, Arguments[0], NULL, NULL);
             break;
 
         case LECTURE_NOTICE_REQUEST:
-            buildDataPack(&dataPack, CurrentLectureInfo.lectureName, NULL, NULL, NULL, NULL);
+            buildDataPack(&dataPack, CurrentLectureInfo.lectureName, NULL, NULL);
             break;
 
         case LECTURE_NOTICE_SET_REQUEST:
-            buildDataPack(&dataPack, CurrentLectureInfo.lectureName, NULL, NULL, NULL, Arguments[0]);
+            buildDataPack(&dataPack, CurrentLectureInfo.lectureName, NULL, Arguments[0]);
             break;
         
         case LECTURE_ENTER_REQUEST:
-            buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, NULL);
+            buildDataPack(&dataPack, Arguments[0], NULL, NULL);
             // buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, NULL);
             break;
         
         case LECTURE_LEAVE_REQUEST:
-            buildDataPack(&dataPack, CurrentLectureInfo.lectureName, NULL, NULL, NULL, NULL);
+            buildDataPack(&dataPack, CurrentLectureInfo.lectureName, NULL, NULL);
             break;
         
         case LECTURE_REGISTER_REQUEST:
-            buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, NULL);
+            buildDataPack(&dataPack, Arguments[0], NULL, NULL);
             break;
         
         case LECTURE_DEREGISTER_REQUEST:
-            buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, NULL);
+            buildDataPack(&dataPack, Arguments[0], NULL, NULL);
+            break;
+
+        case LECTURE_STATUS_REQUEST:
+            buildDataPack(&dataPack, CurrentLectureInfo.lectureName, NULL, NULL);
             break;
 
         case ATTENDANCE_START_REQUEST:
-            buildDataPack(&dataPack, Arguments[0], Arguments[2], NULL, NULL, Arguments[1]);
+            buildDataPack(&dataPack, Arguments[0], Arguments[2], Arguments[1]);
             break;
         
         case ATTNEDANCE_STOP_REQUEST:
             break;
 
         case ATTNEDANCE_EXTEND_REQUEST:
-            buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, NULL);
+            buildDataPack(&dataPack, Arguments[0], NULL, NULL);
             break;
         
         case ATTENDANCE_RESULT_REQUEST:
             break;
         
         case ATTENDANCE_CHECK_REQUEST:
-            buildDataPack(&dataPack, Arguments[0], NULL, NULL, NULL, UserInputBuffer);
+            buildDataPack(&dataPack, Arguments[0], NULL, UserInputBuffer);
             break;
 
         case CHAT_ENTER_REQUEST:
@@ -341,7 +358,7 @@ bool composeDataPack(enum Command command)
             break;
         
         case CHAT_SEND_MESSAGE_REQUEST:
-            buildDataPack(&dataPack, NULL, NULL, NULL, NULL, UserInputBuffer);
+            buildDataPack(&dataPack, NULL, NULL, UserInputBuffer);
             break;
 
         default:
@@ -438,9 +455,9 @@ bool decomposeDataPack(DataPack *dataPack)
         case LECTURE_ENTER_RESPONSE:
             if (dataPack->result)
             {
-                changeClientStatus(Lobby);
                 strncpy(CurrentLectureInfo.lectureName, dataPack->data1, sizeof(CurrentLectureInfo.lectureName));
                 CurrentLectureInfo.lectureID = atoi(dataPack->data2);
+                changeClientStatus(Lobby);
                 printMessage(MessageWindow, "강의실에 입장하였습니다. 강의명: '%s'\n", dataPack->data1);
             }
             else
@@ -451,6 +468,8 @@ bool decomposeDataPack(DataPack *dataPack)
             {
                 changeClientStatus(LectureBrowser);
                 printMessage(MessageWindow, "강의실에 퇴장하였습니다. 강의명: '%s'\n", dataPack->data1);
+
+                composeDataPack(LECTURE_LIST_REQUEST);
             }
             else
                 printMessage(MessageWindow, "강의실에서 나가던 중 문제가 발생하였습니다. 오류: '%s'\n", dataPack->message);
@@ -471,6 +490,15 @@ bool decomposeDataPack(DataPack *dataPack)
             else
                 printMessage(MessageWindow, "탈퇴 요청을 보내던 중 문제가 발생하였습니다. 오류: '%s'\n", dataPack->message);
             break;
+        case LECTURE_STATUS_RESPONSE:
+            if (dataPack->result)
+            {
+                memcpy(&CurrentLectureInfo.statusPack, &dataPack->message, sizeof(LectureStatusPack));
+                updateLectureStatus();
+            }
+            else
+                printMessage(MessageWindow, "탈퇴 요청을 보내던 중 문제가 발생하였습니다. 오류: '%s'\n", dataPack->message);
+            break;
 
         case ATTENDANCE_START_RESPONSE:
             if (dataPack->result)
@@ -483,7 +511,7 @@ bool decomposeDataPack(DataPack *dataPack)
         case ATTNEDANCE_STOP_RESPONSE:
             if (dataPack->result)
             {
-                printMessage(MessageWindow, "출석체크를 종료합니다.\n");
+                printMessage(MessageWindow, "출석체크가 종료되었습니다.\n");
             }
             else
                 printMessage(MessageWindow, "출석체크를 종료 할 수 없습니다. 오류: '%s'\n", dataPack->message);
@@ -491,7 +519,7 @@ bool decomposeDataPack(DataPack *dataPack)
         case ATTNEDANCE_EXTEND_RESPONSE:
             if (dataPack->result)
             {
-                printMessage(MessageWindow, "출석체크를 '%d'분 연장합니다.\n종료 시간: '%s'\n", dataPack->data1, dataPack->data2);
+                printMessage(MessageWindow, "출석체크를 '%s'분 연장합니다.\n종료 시간: '%s'\n", dataPack->data1, dataPack->data2);
             }
             else
                 printMessage(MessageWindow, "출석체크 시간 연장을 할 수 없습니다. 오류: '%s'\n", dataPack->message);
@@ -675,7 +703,9 @@ void receiveUserCommand()
                     ReceiveArgument = true;
                     TargetArgument = 3;
                     break;
-
+                default:
+                    printMessage(MessageWindow, "잘못된 명령어 입력: '%s'\n", UserInputBuffer);
+                    break;
             }
             break;
 
@@ -755,7 +785,10 @@ void receiveUserCommand()
                     if (CurrentUserInfo.role == USER_STUDENT)
                         composeDataPack(ATTENDANCE_CHECK_REQUEST);
                     else
+                    {
                         changeClientStatus(Attendance);
+                        printMessage(MessageWindow, "출석 체크 관리 페이지 입니다.\n");
+                    }
                     break;
                 case 3:
                     // quizRequest(QUIZ_REQUEST);
@@ -823,6 +856,7 @@ void receiveUserCommand()
                     break;
                 case 8:
                     changeClientStatus(Lobby);
+                    printMessage(MessageWindow, "강의실 로비 입니다.\n");
                     break;
                 case 9:
                     composeDataPack(USER_LOGOUT_REQUEST);
@@ -834,6 +868,7 @@ void receiveUserCommand()
                     printMessage(MessageWindow, "잘못된 명령어 입력: '%s'\n", UserInputBuffer);
                     break;
             }
+            break;
 
         default:
             printMessage(MessageWindow, "Invaild client status\n");
@@ -910,7 +945,7 @@ void updateCommandByStatus()
                     break;
 
                 case LectureBrowser:
-                    updateCommand("1: 강의 목록 보기\n2: 강의 입장\n3. 강의 개설\n4.강의 삭제\n\n\n\n\n9: 로그아웃\n0: 프로그램 종료");
+                    updateCommand("1: 강의 목록 보기\n2: 강의 입장\n3. 강의 개설\n4. 강의 삭제\n\n\n\n\n9: 로그아웃\n0: 프로그램 종료");
                     break;
                         
                 case Lobby:
@@ -982,6 +1017,16 @@ void updateInputByStatus()
     updateInput(UserInputGuide, UserInputBuffer);
 }
 
+void updateLectureStatus()
+{
+    if (CurrentClientStatus == Lobby || CurrentClientStatus == Chat || CurrentClientStatus == Attendance)
+    {
+        updateStatus(CurrentLectureInfo.lectureName, CurrentLectureInfo.statusPack.isProfessorOnline, CurrentLectureInfo.statusPack.onlineUserCount, ClientStatusString[CurrentClientStatus]);
+        updateNotice(CurrentLectureInfo.statusPack.notice);
+        updateEvent(CurrentLectureInfo.statusPack.isAttendanceActive, CurrentLectureInfo.statusPack.isQuizActive);
+    }
+}
+
 void changeClientStatus(enum ClientStatus status)
 {
     CurrentClientStatus = status;
@@ -990,31 +1035,9 @@ void changeClientStatus(enum ClientStatus status)
     updateCommandByStatus();
     updateInputByStatus();
 
-    switch (CurrentClientStatus)
+    if (CurrentClientStatus == Lobby || CurrentClientStatus == Chat || CurrentClientStatus == Attendance)
     {
-        case Login:
-            break;
-
-        case LectureBrowser:
-            break;
-
-        case Lobby:
-            updateStatus();
-            updateNotice("엄준식 엄톰식 엄흉길");
-            updateEvent(true, false);
-            break;
-
-        case Chat:
-            updateStatus();
-            updateNotice("도파 압도 도파고");
-            updateEvent(false, true);
-            break;
-
-        case Attendance:
-            break;
-
-        default:
-            break;
+        composeDataPack(LECTURE_STATUS_REQUEST);
     }
 }
 
@@ -1050,4 +1073,20 @@ void setArgumentGuide(char *guide1, char *guide2, char *guide3, char *guide4, ch
         strncpy(ArgumentGuide[3], guide4, sizeof(ArgumentGuide[3]));
     if (guide5 != NULL)
         strncpy(ArgumentGuide[4], guide5, sizeof(ArgumentGuide[4]));
+}
+
+void initializeTimer()
+{
+    time_t timeNow;
+    time(&timeNow);
+
+    int delay = (60 - timeNow % 60) + 2;
+
+    struct itimerval itimer;
+    itimer.it_value.tv_sec = delay;
+    itimer.it_value.tv_usec = 0;
+    itimer.it_interval.tv_sec = 60;
+    itimer.it_interval.tv_usec = 0;
+
+    setitimer(ITIMER_REAL, &itimer, (struct itimerval *)NULL);
 }
