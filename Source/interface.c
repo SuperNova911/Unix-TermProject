@@ -139,7 +139,7 @@ void printMessage(WINDOW *window, const char *format, ...)
     wrefresh(window);
 }
 
-void updateStatus()
+void updateStatus(char *lectureName, bool isProfessorOnline, int onlineUserCount, char *clientStatus)
 {
     int parentX, parentY;
     getmaxyx(StatusWindow, parentY, parentX);
@@ -151,23 +151,23 @@ void updateStatus()
     char lobbyString[32];
 
     struct tm *timeData;
-    time_t currentTime;
-    currentTime = time(NULL);
-    timeData = localtime(&currentTime);
+    time_t timeNow;
+    time(&timeNow);
+    timeData = localtime(&timeNow);
 
     sprintf(timeString, "[현재 시간 %02d:%02d]", timeData->tm_hour, timeData->tm_min);
-    sprintf(lectureString, "강의: %s", "Unix System Prog");
-    sprintf(professorStatusString, "교수님 상태: %s", "온라인");
-    sprintf(activeUserString, "접속 중인 사용자: %d명", 24);
-    sprintf(lobbyString, "%s", "강의실 로비");
+    sprintf(lectureString, "강의: %s", lectureName);
+    sprintf(professorStatusString, "교수님 상태: %s", (isProfessorOnline ? "온라인" : "오프라인"));
+    sprintf(activeUserString, "접속 중인 사용자: %d명", onlineUserCount);
+    sprintf(lobbyString, "%s", clientStatus);
 
     wclear(StatusWindow);
 
     mvwprintw(StatusWindow, 0, (((parentX + 1) / 2) - (strlen(timeString) / 2)), timeString);
     mvwprintw(StatusWindow, 1, 0, lectureString);
     mvwprintw(StatusWindow, 2, 0, professorStatusString);
-    mvwprintw(StatusWindow, 1, (parentX - strlen(activeUserString) + 8), activeUserString);
-    mvwprintw(StatusWindow, 2, (parentX - strlen(lobbyString) + 5), lobbyString);
+    mvwprintw(StatusWindow, 1, (parentX - strlen(activeUserString)), activeUserString);
+    mvwprintw(StatusWindow, 2, (parentX - strlen(lobbyString)), lobbyString);
 
     wrefresh(StatusWindow);
 }
@@ -179,16 +179,16 @@ void updateNotice(char *notice)
     wrefresh(NoticeWindow);
 }
 
-void updateEvent(bool isAttendanceCheck, bool isQuiz)
+void updateEvent(bool isAttendanceActive, bool isQuizActive)
 {
     wclear(EventWindow);
 
-    if (isAttendanceCheck)
+    if (isAttendanceActive)
         mvwprintw(EventWindow, 0, 0, "현재 출석체크중 입니다");
     else
         mvwprintw(EventWindow, 0, 0, "진행중인 출석체크가 없습니다");
 
-    if (isQuiz)
+    if (isQuizActive)
         mvwprintw(EventWindow, 1, 0, "현재 퀴즈가 진행중 입니다");
     else
         mvwprintw(EventWindow, 1, 0, "진행중인 퀴즈가 없습니다");
@@ -233,7 +233,7 @@ void signalResize()
     endwin();
     refresh();
     drawLectureLayout();
-    updateStatus();
-    updateNotice("Vigenere sample source code has been uploaded onto our class khub. You may use it for your Lab 4. Vigenere 소스코드를 khub에 올려놓았으니 참고하세요.");
-    updateEvent(true, false);
+    // updateStatus();
+    // updateNotice("Vigenere sample source code has been uploaded onto our class khub. You may use it for your Lab 4. Vigenere 소스코드를 khub에 올려놓았으니 참고하세요.");
+    // updateEvent(true, false);
 }
