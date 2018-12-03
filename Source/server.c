@@ -6,6 +6,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +18,7 @@
 #include <sys/stat.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <sys/types.h>
 
 #define SERVER_PORT 10743
@@ -49,11 +51,12 @@ void lectureEnter(int sender, char *lectureName, UserInfo *userInfo);
 void lectureLeave(int sender, char *lectureName, UserInfo *userInfo);
 void lectureRegister(int sender, char *lectureName, UserInfo *userInfo);
 void lectureDeregister(int sender, char *lectureName, UserInfo *userInfo);
+void lectureStatus(int sender, char *lectureName);
 void attendanceStart(int sender, char *duration, char *answer, char *quiz, UserInfo *userInfo);
 void attendanceStop(int sender, UserInfo *userInfo);
 void attendanceExtend(int sender, char *duration, UserInfo *userInfo);
 void attendanceResult(int sender, UserInfo *userInfo);
-void attendanceCheck(int sender, char *HWID, char *answer, UserInfo *userInfo);
+void attendanceCheck(int sender, char *IP, char *answer, UserInfo *userInfo);
 void chatEnter(int sender, UserInfo *userInfo);
 void chatLeave(int sender, UserInfo *userInfo);
 void chatUserList(int sender, UserInfo *userInfo);
@@ -77,7 +80,11 @@ void setErrorMessage(DataPack *dataPack, char *message);
 void disconnectUser(int socket);
 void loadLectureListFromDB();
 int getNextLectureID();
-
+void attendanceSignalHandler();
+void sendMessageToLectureMember(LectureInfo *lectureInfo, char *sender, char *message, bool onChat);
+void sendDataPackToLectureMember(LectureInfo *lectureInfo, DataPack *dataPack, bool onChat);
+void initializeTimer();
+LectureStatusPack getLectureStatusPack(LectureInfo *lectureInfo);
 
 int UserCount;
 int LectureCount;
@@ -93,6 +100,12 @@ fd_set Master, Reader;
 extern WINDOW *MessageWindow, *MessageWindowBorder;
 extern WINDOW *CommandWindow, *CommandWindowBorder;
 extern WINDOW *InputWindow, *InputWindowBorder;
+
+void test()
+{
+    printMessage(MessageWindow, "test\n");
+    sleep(1);
+}
 
 int main()
 {
@@ -112,6 +125,9 @@ int main()
     loadLectureListFromDB();
 
     initiateServer();
+
+    sigset(SIGALRM, attendanceSignalHandler);
+    initializeTimer();
 
     async();
 
@@ -186,8 +202,13 @@ void async()
         Reader = Master;
         if (select(Fdmax + 1, &Reader, NULL, NULL, NULL) == -1)
         {
-            printMessage(MessageWindow, "select: %s\n", strerror(errno));
-            return;
+            if (errno != EINTR)
+            {
+                printMessage(MessageWindow, "select: '%s'\n", strerror(errno));
+                sleep(3);
+                return;
+            }
+            continue;
         }
 
         for (int fd = 0; fd <= Fdmax; fd++)
@@ -326,6 +347,9 @@ void decomposeDataPack(int sender, DataPack *dataPack)
             break;
         case LECTURE_DEREGISTER_REQUEST:
             lectureDeregister(sender, dataPack->data1, &dataPack->userInfo);
+            break;
+        case LECTURE_STATUS_REQUEST:
+            lectureStatus(sender, dataPack->data1);
             break;
 
         case ATTENDANCE_START_REQUEST:
@@ -490,9 +514,13 @@ void lectureList(int sender)
         return;
     }
 
+    char buffer[1024];
+    memset(buffer, 0, sizeof(buffer));
+
     for (int index = 0; index < LectureCount; index++)
     {
-        sprintf(dataPack.message, "%s%s[%d/%d]\n", dataPack.message, LectureInfoList[index].lecture.lectureName, LectureInfoList[index].onlineUserCount, MAX_LECTURE_MEMBER);
+        sprintf(buffer, "%s%s[%d/%d]\n", buffer, LectureInfoList[index].lecture.lectureName, LectureInfoList[index].onlineUserCount, MAX_LECTURE_MEMBER);
+        buildDataPack(&dataPack, NULL, NULL, buffer);
     }
 
     dataPack.result = true;
@@ -602,7 +630,7 @@ void lectureNotice(int sender, char *lectureName)
 
     for (int index = 0; index < loaded; index++)
     {
-        buildDataPack(&dataPack, NULL, NULL, NULL, NULL, noticeList[index]);
+        buildDataPack(&dataPack, NULL, NULL, noticeList[index]);
         dataPack.result = true;
         sendDataPack(sender, &dataPack);
     }
@@ -660,9 +688,21 @@ void lectureEnter(int sender, char *lectureName, UserInfo *userInfo)
         return;
     }
 
-    buildDataPack(&dataPack, lectureName, NULL, NULL, NULL, NULL);
+    buildDataPack(&dataPack, lectureName, NULL, NULL);
     dataPack.result = true;
     sendDataPack(sender, &dataPack);
+
+    bool findResult;
+    LectureInfo *lectureInfo = findLectureInfoByName(lectureName, &findResult);
+    if (findResult)
+    {
+        resetDataPack(&dataPack);
+        dataPack.command = LECTURE_STATUS_RESPONSE;
+        dataPack.result = true;
+        LectureStatusPack statusPack = getLectureStatusPack(lectureInfo);
+        memcpy(&dataPack.message, &statusPack, sizeof(LectureStatusPack));
+        sendDataPackToLectureMember(lectureInfo, &dataPack, false);
+    }
 }
 
 void lectureLeave(int sender, char *lectureName, UserInfo *userInfo)
@@ -686,6 +726,8 @@ void lectureLeave(int sender, char *lectureName, UserInfo *userInfo)
         chatSendMessage(sender, "강의 대화를 나갔습니다.", userInfo);
     }
 
+    LectureInfo *lectureInfo = findLectureInfoByName(lectureName, &findResult);
+
     if (userLeaveLecture(userInfo->studentID, lectureName) == false)
     {
         setErrorMessage(&dataPack, "해당 강의 정보가 잘못됐거나 이미 나갔습니다");
@@ -693,8 +735,19 @@ void lectureLeave(int sender, char *lectureName, UserInfo *userInfo)
         return;
     }
 
+    buildDataPack(&dataPack, lectureInfo->lecture.lectureName);
     dataPack.result = true;
     sendDataPack(sender, &dataPack);
+
+    if (findResult)
+    {
+        resetDataPack(&dataPack);
+        dataPack.command = LECTURE_STATUS_RESPONSE;
+        dataPack.result = true;
+        LectureStatusPack statusPack = getLectureStatusPack(lectureInfo);
+        memcpy(&dataPack.message, &statusPack, sizeof(LectureStatusPack));
+        sendDataPackToLectureMember(lectureInfo, &dataPack, false);
+    }
 }
 
 void lectureRegister(int sender, char *lectureName, UserInfo *userInfo)
@@ -785,6 +838,28 @@ void lectureDeregister(int sender, char *lectureName, UserInfo *userInfo)
     sendDataPack(sender, &dataPack);
 }
 
+void lectureStatus(int sender, char *lectureName)
+{
+    DataPack dataPack;
+    resetDataPack(&dataPack);
+    dataPack.command = LECTURE_STATUS_RESPONSE;
+
+    bool findResult;
+    LectureInfo *lectureInfo = findLectureInfoByName(lectureName, &findResult);
+    if (findResult == false)
+    {
+        setErrorMessage(&dataPack, "현재 강의 정보가 잘못되었습니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    LectureStatusPack statusPack = getLectureStatusPack(lectureInfo);
+
+    memcpy(&dataPack.message, &statusPack, sizeof(LectureStatusPack));
+    dataPack.result = true;
+    sendDataPack(sender, &dataPack);
+}
+
 void attendanceStart(int sender, char *duration, char *answer, char *quiz, UserInfo *userInfo)
 {
     DataPack dataPack;
@@ -815,24 +890,32 @@ void attendanceStart(int sender, char *duration, char *answer, char *quiz, UserI
         return;
     }
 
-    time(&lectureInfo->attendanceEndtime);
-    lectureInfo->attendanceEndtime += (atoi(duration) * 60);
-    
+    if (lectureAttendanceStart(lectureInfo, atoi(duration)) == false)
+    {
+        setErrorMessage(&dataPack, "이미 출석 체크가 진행중 입니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    strncpy(lectureInfo->quiz, quiz, sizeof(lectureInfo->quiz));
+    strncpy(lectureInfo->quizAnswer, answer, sizeof(lectureInfo->quizAnswer));
+
     struct tm *timeData;
     timeData = localtime(&lectureInfo->attendanceEndtime);
     char timeString[128];
-    sprintf(timeString, "%02d시 %02d분 %02d초", timeData->tm_hour, timeData->tm_min, timeData->tm_sec);
+    sprintf(timeString, "%02d시 %02d분", timeData->tm_hour, timeData->tm_min);
 
-    buildDataPack(&dataPack, duration, timeString, NULL, NULL, quiz);
+    buildDataPack(&dataPack, duration, timeString, quiz);
     dataPack.result = true;
 
-    for (int index = 0; index < lectureInfo->onlineUserCount; index++)
-    {
-        if (FD_ISSET(lectureInfo->onlineUser[index]->socket, &Master))
-        {
-            sendDataPack(lectureInfo->onlineUser[index]->socket, &dataPack);
-        }
-    }
+    sendDataPackToLectureMember(lectureInfo, &dataPack, false);
+
+    resetDataPack(&dataPack);
+    dataPack.command = LECTURE_STATUS_RESPONSE;
+    dataPack.result = true;
+    LectureStatusPack statusPack = getLectureStatusPack(lectureInfo);
+    memcpy(&dataPack.message, &statusPack, sizeof(LectureStatusPack));
+    sendDataPackToLectureMember(lectureInfo, &dataPack, false);
 }
 
 void attendanceStop(int sender, UserInfo *userInfo)
@@ -865,15 +948,23 @@ void attendanceStop(int sender, UserInfo *userInfo)
         return;
     }
 
+    if (lectureAttendanceStop(lectureInfo) == false)
+    {
+        setErrorMessage(&dataPack, "출석체크가 진행중이 아닙니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
     dataPack.result = true;
 
-    for (int index = 0; index < lectureInfo->onlineUserCount; index++)
-    {
-        if (FD_ISSET(lectureInfo->onlineUser[index]->socket, &Master))
-        {
-            sendDataPack(lectureInfo->onlineUser[index]->socket, &dataPack);
-        }
-    }
+    sendDataPackToLectureMember(lectureInfo, &dataPack, false);
+
+    resetDataPack(&dataPack);
+    dataPack.command = LECTURE_STATUS_RESPONSE;
+    dataPack.result = true;
+    LectureStatusPack statusPack = getLectureStatusPack(lectureInfo);
+    memcpy(&dataPack.message, &statusPack, sizeof(LectureStatusPack));
+    sendDataPackToLectureMember(lectureInfo, &dataPack, false);
 }
 
 void attendanceExtend(int sender, char *duration, UserInfo *userInfo)
@@ -906,30 +997,29 @@ void attendanceExtend(int sender, char *duration, UserInfo *userInfo)
         return;
     }
 
-    if (lectureInfo->attendanceActive == false)
+    if (lectureInfo->isAttendanceActive == false)
     {
         setErrorMessage(&dataPack, "출석 체크 중이 아닙니다");
         sendDataPack(sender, &dataPack);
         return;
     }
 
-    lectureInfo->attendanceEndtime += (atoi(duration) * 60);
+    if (lectureAttendanceExtend(lectureInfo, atoi(duration)) == false)
+    {
+        setErrorMessage(&dataPack, "출석체크가 진행중이 아닙니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
 
     struct tm *timeData;
     timeData = localtime(&lectureInfo->attendanceEndtime);
     char timeString[128];
-    sprintf(timeString, "%02d시 %02d분 %02d초", timeData->tm_hour, timeData->tm_min, timeData->tm_sec);
+    sprintf(timeString, "%02d시 %02d분", timeData->tm_hour, timeData->tm_min);
 
-    buildDataPack(&dataPack, duration, timeString, NULL, NULL, NULL);
+    buildDataPack(&dataPack, duration, timeString, NULL);
     dataPack.result = true;
 
-    for (int index = 0; index < lectureInfo->onlineUserCount; index++)
-    {
-        if (FD_ISSET(lectureInfo->onlineUser[index]->socket, &Master))
-        {
-            sendDataPack(lectureInfo->onlineUser[index]->socket, &dataPack);
-        }
-    }
+    sendDataPackToLectureMember(lectureInfo, &dataPack, false);
 }
 
 void attendanceResult(int sender, UserInfo *userInfo)
@@ -962,7 +1052,7 @@ void attendanceResult(int sender, UserInfo *userInfo)
         return;
     }
 
-    if (lectureInfo->attendanceActive)
+    if (lectureInfo->isAttendanceActive)
     {
         setErrorMessage(&dataPack, "출석 체크가 아직 진행 중 입니다");
         sendDataPack(sender, &dataPack);
@@ -975,7 +1065,7 @@ void attendanceResult(int sender, UserInfo *userInfo)
     sendDataPack(sender, &dataPack);
 }
 
-void attendanceCheck(int sender, char *HWID, char *answer, UserInfo *userInfo)
+void attendanceCheck(int sender, char *IP, char *answer, UserInfo *userInfo)
 {
     DataPack dataPack;
     resetDataPack(&dataPack);
@@ -1008,16 +1098,23 @@ void attendanceCheck(int sender, char *HWID, char *answer, UserInfo *userInfo)
     time_t timeNow;
     time(&timeNow);
 
-    if (lectureInfo->attendanceActive == false || lectureInfo->attendanceEndtime < timeNow)
+    if (lectureInfo->isAttendanceActive == false || lectureInfo->attendanceEndtime < timeNow)
     {
         setErrorMessage(&dataPack, "출석 체크가 진행 중이 아닙니다");
         sendDataPack(sender, &dataPack);
         return;
     }
 
-    // check
+    AttendanceCheckLog checkLog;
+    checkLog.lectureID = lectureInfo->lecture.lectureID;
+    strncpy(checkLog.studentID, userInfo->studentID, sizeof(checkLog.studentID));
+    strncpy(checkLog.IP, IP, sizeof(checkLog.IP));
+    strncpy(checkLog.quizAnswer, answer, sizeof(checkLog.quizAnswer));
+    time(&checkLog.checkDate);
 
-    dataPack.result = false;
+    saveAttendanceCheckLog(&checkLog);
+
+    dataPack.result = true;
     sendDataPack(sender, &dataPack);
 }
 
@@ -1032,6 +1129,14 @@ void chatEnter(int sender, UserInfo *userInfo)
     if (findResult == false)
     {
         setErrorMessage(&dataPack, "잘못된 사용자 정보입니다");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    LectureInfo *lectureInfo = findLectureInfoByID(onlineUser->currentLectureID, &findResult);
+    if (findResult == false)
+    {
+        setErrorMessage(&dataPack, "입장중인 강의가 없습니다");
         sendDataPack(sender, &dataPack);
         return;
     }
@@ -1051,9 +1156,21 @@ void chatEnter(int sender, UserInfo *userInfo)
     }
 
     onlineUser->onChat = true;
+
+    int chatUserCount = 0;
+    for (int index = 0; index < lectureInfo->onlineUserCount; index++)
+    {
+        if (lectureInfo->onlineUser[index]->onChat)
+        {
+            chatUserCount++;
+        }
+    }
+
+    sprintf(dataPack.data1, "%d", chatUserCount);
     dataPack.result = true;
     sendDataPack(sender, &dataPack);
 }
+
 void chatLeave(int sender, UserInfo *userInfo)
 {
     DataPack dataPack;
@@ -1087,6 +1204,7 @@ void chatLeave(int sender, UserInfo *userInfo)
     dataPack.result = true;
     sendDataPack(sender, &dataPack);
 }
+
 void chatUserList(int sender, UserInfo *userInfo)
 {
     DataPack dataPack;
@@ -1121,6 +1239,7 @@ void chatUserList(int sender, UserInfo *userInfo)
     dataPack.result = true;
     sendDataPack(sender, &dataPack);
 }
+
 void chatSendMessage(int sender, char *message, UserInfo *userInfo)
 {
     DataPack dataPack;
@@ -1149,10 +1268,10 @@ void chatSendMessage(int sender, char *message, UserInfo *userInfo)
     time(&currentTime);
     timeData = localtime(&currentTime);
 
-    char timeString[6];
+    char timeString[16];
     sprintf(timeString, "%02d:%02d", timeData->tm_hour, timeData->tm_min);
 
-    buildDataPack(&dataPack, userInfo->userName, timeString, NULL, NULL, message);
+    buildDataPack(&dataPack, userInfo->userName, timeString, message);
 
     for (int index = 0; index < lectureInfo->onlineUserCount; index++)
     {
@@ -1293,6 +1412,11 @@ bool userEnterLecture(char *studentID, char *lectureName)
     if (findResult == false)
         return false;
 
+    if (strcmp(lectureInfo->lecture.professorID, studentID) == 0)
+    {
+        lectureInfo->isProfessorOnline = true;
+    }
+
     lectureInfo->onlineUser[lectureInfo->onlineUserCount] = onlineUser;
     lectureInfo->onlineUserCount++;
 
@@ -1316,6 +1440,11 @@ bool userLeaveLecture(char *studentID, char *lectureName)
     {
         if (isSameUserID(&lectureInfo->onlineUser[index]->user, studentID))
         {
+            if (strcmp(lectureInfo->lecture.professorID, studentID) == 0)
+            {
+                lectureInfo->isProfessorOnline = false;
+            }
+
             lectureInfo->onlineUser[index] = lectureInfo->onlineUser[lectureInfo->onlineUserCount];
             // 초기화?
             lectureInfo->onlineUserCount--;
@@ -1458,4 +1587,90 @@ int getNextLectureID()
     }
 
     return max;
+}
+
+void attendanceSignalHandler()
+{
+    DataPack dataPack;
+
+    time_t timeNow;
+    time(&timeNow);
+
+    for (int index = 0; index < LectureCount; index++)
+    {
+        if (LectureInfoList[index].isAttendanceActive && LectureInfoList[index].attendanceEndtime <= timeNow)
+        {
+            lectureAttendanceStop(&LectureInfoList[index]);
+            sendMessageToLectureMember(&LectureInfoList[index], "강의", "출석체크가 종료되었습니다", false);
+
+            resetDataPack(&dataPack);
+            dataPack.command = LECTURE_STATUS_RESPONSE;
+            dataPack.result = true;
+            LectureStatusPack statusPack = getLectureStatusPack(&LectureInfoList[index]);
+            memcpy(&dataPack.message, &statusPack, sizeof(LectureStatusPack));
+            sendDataPackToLectureMember(&LectureInfoList[index], &dataPack, false);
+        }
+    }
+}
+
+void sendMessageToLectureMember(LectureInfo *lectureInfo, char *sender, char *message, bool onChat)
+{
+    DataPack dataPack;
+    dataPack.command = CHAT_SEND_MESSAGE_RESPONSE;
+    dataPack.result = true;
+
+    struct tm *timeData;
+    time_t timeNow;
+    time(&timeNow);
+    timeData = localtime(&timeNow);
+
+    char timeString[16];
+    sprintf(timeString, "%02d:%02d", timeData->tm_hour, timeData->tm_min);
+
+    buildDataPack(&dataPack, sender, timeString, message);
+
+    sendDataPackToLectureMember(lectureInfo, &dataPack, onChat);
+}
+
+void sendDataPackToLectureMember(LectureInfo *lectureInfo, DataPack *dataPack, bool onChat)
+{
+    for (int index = 0; index < lectureInfo->onlineUserCount; index++)
+    {
+        if (FD_ISSET(lectureInfo->onlineUser[index]->socket, &Master) && (onChat ? lectureInfo->onlineUser[index]->onChat : true))
+        {
+            sendDataPack(lectureInfo->onlineUser[index]->socket, dataPack);
+        }
+    }
+}
+
+void initializeTimer()
+{
+    time_t timeNow;
+    time(&timeNow);
+
+    int delay = (60 - timeNow % 60) + 2;
+
+    struct itimerval itimer;
+    itimer.it_value.tv_sec = delay;
+    itimer.it_value.tv_usec = 0;
+    itimer.it_interval.tv_sec = 15;
+    itimer.it_interval.tv_usec = 0;
+    setitimer(ITIMER_REAL, &itimer, (struct itimerval *)NULL);
+}
+
+LectureStatusPack getLectureStatusPack(LectureInfo *lectureInfo)
+{
+    const int NOTICE_NUM = 1;
+    char noticeList[NOTICE_NUM][512];
+    memset(noticeList, 0, sizeof(noticeList[0]));
+
+    int loaded;
+    loaded = loadLectureNotice(noticeList, NOTICE_NUM, lectureInfo->lecture.lectureID);
+
+    if (loaded == 0)
+    {
+        strncpy(noticeList[0], "등록된 공지사항이 없습니다", sizeof(noticeList[0]));
+    }
+
+    return createLectureStatusPack(lectureInfo->onlineUserCount, lectureInfo->isProfessorOnline, lectureInfo->isAttendanceActive, lectureInfo->isQuizActive, noticeList[0]);
 }
