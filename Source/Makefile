@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -W -Wall -std=c99 -lncursesw -I/usr/include/mysql -L/usr/lib/mysql -lmysqlclient
+CFLAGS = -W -Wall -std=c99 -lncursesw -I/usr/include/mysql -L/usr/lib64/mysql -lmysqlclient
 OBJECT1 = client.o dataPack.o interface.o user.o lecture.o
 OBJECT2 = server.o dataPack.o interface.o database.o user.o lecture.o
 
