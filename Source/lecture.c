@@ -65,3 +65,49 @@ bool lectureRemoveMember(Lecture *lecture, char *studentID)
 
     return false;
 }
+
+bool isLectureMember(Lecture *lecture, char *studentID)
+{
+    for (int index = 0; index > lecture->memberCount; index++)
+    {
+        if (strcmp(lecture->memberList[index], studentID) == 0)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool lectureAttendanceStart(LectureInfo *lectureInfo, int duration)
+{
+    if (lectureInfo->isAttendanceActive)
+        return false;
+
+    time(&lectureInfo->attendanceEndtime);
+    lectureInfo->attendanceEndtime += duration * 60;
+    lectureInfo->isAttendanceActive = true;
+
+    return true;
+}
+
+bool lectureAttendanceStop(LectureInfo *lectureInfo)
+{
+    if (lectureInfo->isAttendanceActive == false)
+        return false;
+
+    time(&lectureInfo->attendanceEndtime);
+    lectureInfo->isAttendanceActive = false;
+
+    return true;
+}
+
+bool lectureAttendanceExtend(LectureInfo *lectureInfo, int duration)
+{
+    if (lectureInfo->isAttendanceActive == false)
+        return false;
+
+    lectureInfo->attendanceEndtime += duration * 60;
+
+    return true;
+}

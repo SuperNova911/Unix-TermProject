@@ -21,8 +21,12 @@ typedef struct LectureInfo_t
     Lecture lecture;
     int onlineUserCount;
     OnlineUser *onlineUser[MAX_LECTURE_MEMBER];
-    bool attendanceActive;
+    bool isProfessorOnline;
+    bool isAttendanceActive;
     time_t attendanceEndtime;
+    bool isQuizActive;
+    char quiz[512];
+    char quizAnswer[128];
 } LectureInfo;
 
 Lecture createLecture(int lectureID, char *lectureName, char *professorID);
@@ -34,3 +38,8 @@ void resetLectureInfo(LectureInfo *lectureInfo);
 
 bool lectureAddMember(Lecture *lecture, char *studentID);
 bool lectureRemoveMember(Lecture *lecture, char *studentID);
+bool isLectureMember(Lecture *lecture, char *studentID);
+
+bool lectureAttendanceStart(LectureInfo *lectureInfo, int duration);
+bool lectureAttendanceStop(LectureInfo *lectureInfo);
+bool lectureAttendanceExtend(LectureInfo *lectureInfo, int duration);
