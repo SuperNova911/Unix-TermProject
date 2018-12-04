@@ -15,6 +15,12 @@ void initiateInterface()
     noecho();
     curs_set(FALSE);
 
+    use_default_colors();
+    start_color();
+    init_pair(1, COLOR_RED, -1);
+    init_pair(2, COLOR_GREEN, -1);
+    init_pair(3, COLOR_YELLOW, -1);
+
     signal(SIGWINCH, signalResize);
 }
 
@@ -24,27 +30,27 @@ void drawDefaultLayout()
     int parentX, parentY;
     getmaxyx(stdscr, parentY, parentX);
 
-    int commandWindowBorderWidth = 22;
+    int commandWindowBorderWidth = 24;
     int userInputWindowBorderHeight = 4;
 
     wclear(stdscr);
     wrefresh(stdscr);
 
-    MessageWindow = newwin(parentY - userInputWindowBorderHeight - 2, parentX - commandWindowBorderWidth - 2, 1, 1);
+    MessageWindow = newwin(parentY - userInputWindowBorderHeight - 2, parentX - commandWindowBorderWidth - 4, 1, 2);
     MessageWindowBorder = newwin(parentY - userInputWindowBorderHeight, parentX - commandWindowBorderWidth, 0, 0);
 
-    CommandWindow = newwin(parentY - userInputWindowBorderHeight - 2, commandWindowBorderWidth - 2, 1, parentX - commandWindowBorderWidth + 1);
+    CommandWindow = newwin(parentY - userInputWindowBorderHeight - 2, commandWindowBorderWidth - 4, 1, parentX - commandWindowBorderWidth + 2);
     CommandWindowBorder = newwin(parentY - userInputWindowBorderHeight, commandWindowBorderWidth, 0, parentX - commandWindowBorderWidth);
 
-    InputWindow = newwin(userInputWindowBorderHeight - 2, parentX - 2, parentY - userInputWindowBorderHeight + 1, 1);
+    InputWindow = newwin(userInputWindowBorderHeight - 2, parentX - 4, parentY - userInputWindowBorderHeight + 1, 2);
     InputWindowBorder = newwin(userInputWindowBorderHeight, parentX, parentY - userInputWindowBorderHeight, 0);
 
     scrollok(MessageWindow, TRUE);
     scrollok(CommandWindow, TRUE);
 
-    drawBorder(MessageWindowBorder, "MESSAGE");
-    drawBorder(CommandWindowBorder, "COMMAND");
-    drawBorder(InputWindowBorder, "USER INPUT");
+    drawBorder(MessageWindowBorder, "메시지");
+    drawBorder(CommandWindowBorder, "명령어 목록");
+    drawBorder(InputWindowBorder, "사용자 입력");
 
     wrefresh(MessageWindow);
     wrefresh(CommandWindow);
@@ -88,7 +94,7 @@ void drawLectureLayout()
     drawBorder(NoticeWindowBorder, "공지 사항");
     drawBorder(EventWindowBorder, "진행중인 이벤트");
     drawBorder(MessageWindowBorder, "메시지");
-    drawBorder(CommandWindowBorder, "명령어");
+    drawBorder(CommandWindowBorder, "명령어 목록");
     drawBorder(InputWindowBorder, "사용자 입력");
 
     wrefresh(StatusWindow);
@@ -107,6 +113,7 @@ void drawBorder(WINDOW *window, char *windowName)
     getmaxyx(window, y, x);
 
     // 테두리 그리기
+    wattron(window, COLOR_PAIR(3));
     mvwprintw(window, 0, 0, "┌"); 
     mvwprintw(window, y - 1, 0, "└"); 
     mvwprintw(window, 0, x - 1, "┐"); 
@@ -121,9 +128,14 @@ void drawBorder(WINDOW *window, char *windowName)
         mvwprintw(window, 0, i, "─"); 
         mvwprintw(window, y - 1, i, "─"); 
     }
+    wattroff(window, COLOR_PAIR(3));
 
     // 윈도우 이름 출력
+    wattron(window, A_BOLD);
     mvwprintw(window, 0, 4, windowName); 
+    wattroff(window, A_BOLD);
+
+    refresh();
 
     wrefresh(window);
 }
@@ -158,16 +170,30 @@ void updateStatus(char *lectureName, bool isProfessorOnline, int onlineUserCount
     sprintf(timeString, "[현재 시간 %02d:%02d]", timeData->tm_hour, timeData->tm_min);
     sprintf(lectureString, "강의: %s", lectureName);
     sprintf(professorStatusString, "교수님 상태: %s", (isProfessorOnline ? "온라인" : "오프라인"));
-    sprintf(activeUserString, "접속 중인 사용자: %d명", onlineUserCount);
+    sprintf(activeUserString, "접속 중인 사용자: %2d명", onlineUserCount);
     sprintf(lobbyString, "%s", clientStatus);
 
     wclear(StatusWindow);
 
+    wattron(StatusWindow, A_BOLD);
     mvwprintw(StatusWindow, 0, (((parentX + 1) / 2) - (strlen(timeString) / 2)), timeString);
+
     mvwprintw(StatusWindow, 1, 0, lectureString);
-    mvwprintw(StatusWindow, 2, 0, professorStatusString);
-    mvwprintw(StatusWindow, 1, (parentX - strlen(activeUserString)), activeUserString);
-    mvwprintw(StatusWindow, 2, (parentX - strlen(lobbyString)), lobbyString);
+    if (isProfessorOnline)
+    {
+        wattron(StatusWindow, COLOR_PAIR(2));
+        mvwprintw(StatusWindow, 2, 0, professorStatusString);
+        wattroff(StatusWindow, COLOR_PAIR(2));
+    }
+    else
+    {
+        wattron(StatusWindow, COLOR_PAIR(1));
+        mvwprintw(StatusWindow, 2, 0, professorStatusString);
+        wattroff(StatusWindow, COLOR_PAIR(1));
+    }
+    mvwprintw(StatusWindow, 1, (parentX - 22), activeUserString);
+    mvwprintw(StatusWindow, 2, (parentX - strlen(lobbyString) + 6), lobbyString);
+    wattroff(StatusWindow, A_BOLD);
 
     wrefresh(StatusWindow);
 }
@@ -183,15 +209,33 @@ void updateEvent(bool isAttendanceActive, bool isQuizActive)
 {
     wclear(EventWindow);
 
+    wattron(EventWindow, A_BOLD);
     if (isAttendanceActive)
+    {
+        wattron(EventWindow, COLOR_PAIR(2));
         mvwprintw(EventWindow, 0, 0, "현재 출석체크중 입니다");
+        wattroff(EventWindow, COLOR_PAIR(2));
+    }
     else
+    {
+        wattron(EventWindow, COLOR_PAIR(1));
         mvwprintw(EventWindow, 0, 0, "진행중인 출석체크가 없습니다");
+        wattroff(EventWindow, COLOR_PAIR(1));
+    }
 
     if (isQuizActive)
+    {
+        wattron(EventWindow, COLOR_PAIR(2));
         mvwprintw(EventWindow, 1, 0, "현재 퀴즈가 진행중 입니다");
+        wattroff(EventWindow, COLOR_PAIR(2));
+    }
     else
+    {
+        wattron(EventWindow, COLOR_PAIR(1));
         mvwprintw(EventWindow, 1, 0, "진행중인 퀴즈가 없습니다");
+        wattroff(EventWindow, COLOR_PAIR(1));
+    }
+    wattroff(EventWindow, A_BOLD);
 
     wrefresh(EventWindow);
 }
