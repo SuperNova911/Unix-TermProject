@@ -67,7 +67,7 @@ extern const char *CommandString[37];
 
 char *ClientStatusString[6] = 
 {
-    "기본", "로그인", "강의 브라우저", "강의실 로비", "강의 대화", "출석체크 관리 페이지"
+    "기본    ", "로그인   ", "강의 브라우저", "강의실 로비 ", "강의 대화  ", "출석체크 관리"
 };
 
 // 인터페이스
@@ -439,7 +439,7 @@ bool decomposeDataPack(DataPack *dataPack)
         case LECTURE_NOTICE_RESPONSE:
             if (dataPack->result)
             {
-                printMessage(MessageWindow, "공지사항을 불러옵니다. 강의명: '%s'\n%s\n", dataPack->data1, dataPack->message);
+                printMessage(MessageWindow, "'%s'\n", dataPack->message);
             }
             else
                 printMessage(MessageWindow, "공지사항을 불러올 수 없습니다. 오류: '%s'\n", dataPack->message);
@@ -570,7 +570,7 @@ bool decomposeDataPack(DataPack *dataPack)
         case CHAT_SEND_MESSAGE_RESPONSE:
             if (dataPack->result)
             {
-                printMessage(MessageWindow, "%s [%s] %s\n", dataPack->data2, dataPack->data1, dataPack->message);
+                printMessage(MessageWindow, "%s\n", dataPack->message);
             }
             else
                 printMessage(MessageWindow, "메시지를 전송 할 수 없습니다. 오류: '%s'\n", dataPack->message);
@@ -771,6 +771,7 @@ void receiveUserCommand()
                 case 1:
                     if (CurrentUserInfo.role == USER_STUDENT)
                     {
+                        printMessage(MessageWindow, "[공지 사항을 불러옵니다]\n");
                         composeDataPack(LECTURE_NOTICE_REQUEST);
                     }
                     else
