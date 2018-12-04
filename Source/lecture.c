@@ -68,12 +68,17 @@ bool lectureRemoveMember(Lecture *lecture, char *studentID)
 
 bool isLectureMember(Lecture *lecture, char *studentID)
 {
-    for (int index = 0; index > lecture->memberCount; index++)
+    for (int index = 0; index < lecture->memberCount; index++)
     {
         if (strcmp(lecture->memberList[index], studentID) == 0)
         {
             return true;
         }
+    }
+
+    if (strcmp(lecture->professorID, studentID) == 0)
+    {
+        return true;
     }
 
     return false;
@@ -87,6 +92,11 @@ bool lectureAttendanceStart(LectureInfo *lectureInfo, int duration)
     time(&lectureInfo->attendanceEndtime);
     lectureInfo->attendanceEndtime += duration * 60;
     lectureInfo->isAttendanceActive = true;
+
+    for (int index = 0; index < lectureInfo->onlineUserCount; index++)
+    {
+        lectureInfo->onlineUser[index]->hasAttendanceChecked = false;
+    }
 
     return true;
 }

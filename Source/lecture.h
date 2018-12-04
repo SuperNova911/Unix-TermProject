@@ -3,7 +3,7 @@
 #include "user.h"
 #include <time.h>
 
-#define MAX_LECTURE_MEMBER 60
+#define MAX_LECTURE_MEMBER 40
 #define MAX_LECTURE_NAME_LENGTH 64
 
 typedef struct Lecture_t
