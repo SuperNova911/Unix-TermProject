@@ -383,7 +383,7 @@ bool clearAttendanceCheckLog()
 int loadChatLogList(ChatLog *chatLogList, int amount, int lectureID)
 {
 	char query[512];
-	sprintf(query, "SELECT * FROM `ChatLog` WHERE lectureID = '%d' LIMIT %d", lectureID, amount);
+	sprintf(query, "SELECT * FROM `ChatLog` WHERE lectureID = '%d' ORDER BY date DESC LIMIT %d", lectureID, amount);
 	executeQuery(query);
 
 	int index = 0;
