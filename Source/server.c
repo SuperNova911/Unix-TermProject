@@ -1398,9 +1398,9 @@ bool removeOnlineUserBySocket(int socket)
     {
         if (OnlineUserList[index].socket == socket)
         {
+            UserCount--;
             memcpy(&OnlineUserList[index], &OnlineUserList[UserCount], sizeof(OnlineUser));
             memset(&OnlineUserList[UserCount], 0, sizeof(OnlineUser));
-            UserCount--;
             return true;
         }
     }
@@ -1414,9 +1414,9 @@ bool removeOnlineUserByID(char *studentID)
     {
         if (isSameUserID(&OnlineUserList[index].user, studentID))
         {
+            UserCount--;
             memcpy(&OnlineUserList[index], &OnlineUserList[UserCount], sizeof(OnlineUser));
             memset(&OnlineUserList[UserCount], 0, sizeof(OnlineUser));
-            UserCount--;
             return true;
         }
     }
@@ -1440,9 +1440,9 @@ bool removeLectureInfoByName(char *lectureName)
     {
         if (isSameLectureName(&LectureInfoList[index], lectureName))
         {
+            LectureCount--;
             memcpy(&LectureInfoList[index], &LectureInfoList[LectureCount], sizeof(LectureInfo));
             memset(&LectureInfoList[LectureCount], 0, sizeof(LectureInfo));
-            LectureCount--;
             return true;
         }
     }
