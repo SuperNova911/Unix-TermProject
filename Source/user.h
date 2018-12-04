@@ -30,6 +30,7 @@ typedef struct OnlineUser_t
     int socket;
     int currentLectureID;
     bool onChat;
+    bool hasAttendanceChecked;
 } OnlineUser;
 
 User createUser(char *studentID, char *hashedPassword, char *userName, Role role);
