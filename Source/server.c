@@ -735,7 +735,7 @@ void lectureLeave(int sender, char *lectureName, UserInfo *userInfo)
         return;
     }
 
-    buildDataPack(&dataPack, lectureInfo->lecture.lectureName);
+    buildDataPack(&dataPack, lectureInfo->lecture.lectureName, NULL, NULL);
     dataPack.result = true;
     sendDataPack(sender, &dataPack);
 
