@@ -52,7 +52,8 @@ void lectureLeave(int sender, char *lectureName, UserInfo *userInfo);
 void lectureRegister(int sender, char *lectureName, UserInfo *userInfo);
 void lectureDeregister(int sender, char *lectureName, UserInfo *userInfo);
 void lectureStatus(int sender, char *lectureName);
-void attendanceStart(int sender, char *duration, char *answer, char *quiz, UserInfo *userInfo);
+// void attendanceStart(int sender, char *duration, char *answer, char *quiz, UserInfo *userInfo);
+void attendanceStart(int sender, char *duration, UserInfo *userInfo);
 void attendanceStop(int sender, UserInfo *userInfo);
 void attendanceExtend(int sender, char *duration, UserInfo *userInfo);
 void attendanceResult(int sender, UserInfo *userInfo);
@@ -353,7 +354,7 @@ void decomposeDataPack(int sender, DataPack *dataPack)
             break;
 
         case ATTENDANCE_START_REQUEST:
-            attendanceStart(sender, dataPack->data1, dataPack->data2, dataPack->message, &dataPack->userInfo);
+            attendanceStart(sender, dataPack->data1, &dataPack->userInfo);
             break;
         case ATTNEDANCE_STOP_REQUEST:
             attendanceStop(sender, &dataPack->userInfo);
@@ -484,7 +485,15 @@ void userRegister(int sender, char *studentID, char *password, UserInfo *userInf
         return;
     }
 
-    User user = createUser(studentID, password, userInfo->userName, userInfo->role);
+    User user;
+    if (!(strlen(studentID) < sizeof(user.studentID)) || !(strlen(password) < sizeof(user.hashedPassword)))
+    {
+        setErrorMessage(&dataPack, "최대 길이 초과, 학번: 16Bytes, 비밀번호: 64Bytes");
+        sendDataPack(sender, &dataPack);
+        return;
+    }
+
+    user = createUser(studentID, password, userInfo->userName, userInfo->role);
     if (saveUser(&user) == false)
     {
         setErrorMessage(&dataPack, "DB에 저장하던 중 문제가 발생하였습니다.");
@@ -516,7 +525,8 @@ void lectureList(int sender)
 
     for (int index = 0; index < LectureCount; index++)
     {
-        sprintf(buffer, "%s%s [%d/%d]\n", buffer, LectureInfoList[index].lecture.lectureName, LectureInfoList[index].lecture.memberCount, MAX_LECTURE_MEMBER);
+        sprintf(buffer, "%s%s [%d/%d]\n", 
+            buffer, LectureInfoList[index].lecture.lectureName, LectureInfoList[index].lecture.memberCount, MAX_LECTURE_MEMBER);
         buildDataPack(&dataPack, NULL, NULL, buffer);
     }
 
@@ -581,16 +591,16 @@ void lectureRemove(int sender, char *lectureName, UserInfo *userInfo)
         return;
     }
 
-    if (removeLectureInfoByName(lectureName) == false)
+    if (removeLectureByID(lectureInfo->lecture.lectureID) == false)
     {
-        setErrorMessage(&dataPack, "해당 이름이 일치하는 강의가 없습니다");
+        setErrorMessage(&dataPack, "removeLectureByID 실패");
         sendDataPack(sender, &dataPack);
         return;
     }
 
-    if (removeLectureByID(lectureInfo->lecture.lectureID) == false)
+    if (removeLectureInfoByName(lectureName) == false)
     {
-        setErrorMessage(&dataPack, "removeLectureByID 실패");
+        setErrorMessage(&dataPack, "해당 이름이 일치하는 강의가 없습니다");
         sendDataPack(sender, &dataPack);
         return;
     }
@@ -876,7 +886,7 @@ void lectureStatus(int sender, char *lectureName)
     sendDataPack(sender, &dataPack);
 }
 
-void attendanceStart(int sender, char *duration, char *answer, char *quiz, UserInfo *userInfo)
+void attendanceStart(int sender, char *duration, UserInfo *userInfo)
 {
     DataPack dataPack;
     resetDataPack(&dataPack);
@@ -913,15 +923,14 @@ void attendanceStart(int sender, char *duration, char *answer, char *quiz, UserI
         return;
     }
 
-    strncpy(lectureInfo->quiz, quiz, sizeof(lectureInfo->quiz));
-    strncpy(lectureInfo->quizAnswer, answer, sizeof(lectureInfo->quizAnswer));
+    removeAttendanceCheckLog(lectureInfo->lecture.lectureID, lectureInfo->attendanceEndtime);
 
     struct tm *timeData;
     timeData = localtime(&lectureInfo->attendanceEndtime);
     char timeString[128];
     sprintf(timeString, "%02d시 %02d분", timeData->tm_hour, timeData->tm_min);
 
-    buildDataPack(&dataPack, duration, timeString, quiz);
+    buildDataPack(&dataPack, duration, timeString, NULL);
     dataPack.result = true;
 
     sendDataPackToLectureMember(lectureInfo, &dataPack, false);
@@ -1076,9 +1085,39 @@ void attendanceResult(int sender, UserInfo *userInfo)
     }
 
     // collect result
+    AttendanceCheckLog checkLogList[MAX_LECTURE_MEMBER];
+    time_t timeNow;
+    time(&timeNow);
+    int loaded = loadAttendanceCheckLogList(checkLogList, MAX_LECTURE_MEMBER, lectureInfo->lecture.lectureID, timeNow);
 
-    dataPack.result = false;
-    sendDataPack(sender, &dataPack);
+    char resultMessage[4096];
+    memset(resultMessage, 0 ,sizeof(resultMessage));
+
+    sprintf(resultMessage, "[출석체크 결과]\n'%d'명의 학생 중 '%d'명이 출석체크 하였습니다.\n", 
+        lectureInfo->lecture.memberCount, loaded);
+
+    char buffer[128];
+    struct tm *timeData;
+    for (int index = 0; index < loaded; index++)
+    {
+        timeData = localtime(&checkLogList[index].checkDate);
+        memset(buffer, 0 ,sizeof(buffer));
+        sprintf(buffer, "[CHECK] Date: '%02d/%02d %02d:%02d:%02d', ID: '%s', IP: '%s'\n", 
+            timeData->tm_mon + 1, timeData->tm_mday, timeData->tm_hour, timeData->tm_min, timeData->tm_sec, checkLogList[index].studentID, checkLogList[index].IP);
+        
+        strcat(resultMessage, buffer);
+    }
+
+    sprintf(dataPack.data1, "%ld", strlen(resultMessage));
+    dataPack.result = true;
+    for (int index = 0; index < (int)sizeof(resultMessage); index += (sizeof(dataPack.message) - 1))
+    {
+        memcpy(dataPack.message, &resultMessage[index], sizeof(dataPack.message) - 1);
+        if (strlen(dataPack.message) == 0)
+            break;
+
+        sendDataPack(sender, &dataPack);
+    }
 }
 
 void attendanceCheck(int sender, char *IP, char *answer, UserInfo *userInfo)
@@ -1638,7 +1677,7 @@ void loadLectureListFromDB()
 
 int getNextLectureID()
 {
-    int max = 1;
+    int max = 0;
     for (int index = 0; index < LectureCount; index++)
     {
         if (LectureInfoList[index].lecture.lectureID > max)
@@ -1647,7 +1686,7 @@ int getNextLectureID()
         }
     }
 
-    return max;
+    return max + 1;
 }
 
 void attendanceSignalHandler()
