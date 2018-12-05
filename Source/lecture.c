@@ -56,9 +56,9 @@ bool lectureRemoveMember(Lecture *lecture, char *studentID)
     {
         if (strcmp(lecture->memberList[index], studentID) == 0)
         {
+            lecture->memberCount--;
             strncpy(lecture->memberList[index], lecture->memberList[lecture->memberCount], sizeof(lecture->memberList[index]));
             memset(lecture->memberList[lecture->memberCount], 0, sizeof(lecture->memberList[lecture->memberCount]));
-            lecture->memberCount--;
             return true;
         }
     }
