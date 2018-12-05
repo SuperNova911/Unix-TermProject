@@ -7,6 +7,8 @@ WINDOW *MessageWindow, *MessageWindowBorder;
 WINDOW *CommandWindow, *CommandWindowBorder;
 WINDOW *InputWindow, *InputWindowBorder;
 
+bool isCursesMode;
+
 // ncurses라이브러리를 이용한 사용자 인터페이스 초기화
 void initiateInterface()
 {
@@ -14,6 +16,8 @@ void initiateInterface()
     initscr();
     noecho();
     curs_set(FALSE);
+
+    isCursesMode = true;
 
     use_default_colors();
     start_color();
@@ -257,6 +261,7 @@ void updateInput(char *inputGuide, char *userInput)
 // 프로그램 종료시 수행
 void onClose()
 {
+    isCursesMode = false;
     // ncurses윈도우 종료
     delwin(StatusWindow);
     delwin(NoticeWindow);
@@ -280,4 +285,26 @@ void signalResize()
     // updateStatus();
     // updateNotice("Vigenere sample source code has been uploaded onto our class khub. You may use it for your Lab 4. Vigenere 소스코드를 khub에 올려놓았으니 참고하세요.");
     // updateEvent(true, false);
+}
+
+void enterCursesMode()
+{
+    if (isCursesMode)
+        return;
+    
+    isCursesMode = true;
+    
+    reset_prog_mode();
+    refresh();
+}
+
+void leaveCursesMode()
+{
+    if (isCursesMode == false)
+        return;
+
+    isCursesMode = false;
+
+    def_prog_mode();
+    endwin();
 }

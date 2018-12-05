@@ -25,3 +25,5 @@ void updateCommand(char *commandList);
 void updateInput(char *inputGuide, char *userInput);
 void onClose();
 void signalResize();
+void enterCursesMode();
+void leaveCursesMode();
