@@ -61,6 +61,7 @@ bool receiveArgumentComplete();
 void resetArgument();
 void setArgumentGuide(char *guide1, char *guide2, char *guide3, char *guide4, char *guide5);
 void initializeTimer();
+void exitProgram();
 
 extern const char *UserRoleString[4];
 extern const char *CommandString[37];
@@ -83,9 +84,13 @@ UserInfo CurrentUserInfo;
 int ServerSocket;
 int Fdmax;
 fd_set Master, Reader;
+char ClientAddress[16];
 
 char UserInputGuide[64];
 char UserInputBuffer[256];
+
+unsigned int AttendanceResultLength;
+char AttendanceResultBuffer[4096];
 
 enum Command CurrentRequest;
 int TargetArgument, CurrentArgument;
@@ -161,19 +166,28 @@ bool connectServer()
         return false;
     }
 
-    struct sockaddr_in serverAddr;
-    memset(&serverAddr, 0, sizeof(struct sockaddr_in));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(SERVER_PORT);
-    serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    // serverAddr.sin_addr.s_addr = inet_addr(SERVER_ADDRESS);
+    struct sockaddr_in clientAddr;
+    memset(&clientAddr, 0, sizeof(struct sockaddr_in));
+    clientAddr.sin_family = AF_INET;
+    clientAddr.sin_port = htons(SERVER_PORT);
+    clientAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    // clientAddr.sin_addr.s_addr = inet_addr(SERVER_ADDRESS);
 
     // 서버에 연결 요청
-    if (connect(ServerSocket, (struct sockaddr *)&serverAddr, sizeof(struct sockaddr_in)) == -1)
+    if (connect(ServerSocket, (struct sockaddr *)&clientAddr, sizeof(struct sockaddr_in)) == -1)
     {
         printMessage(MessageWindow, "connect: '%s'\n", strerror(errno));
         return false;
     }
+
+    socklen_t addrlen = sizeof(struct sockaddr_in);
+    if (getsockname(ServerSocket, (struct sockaddr *)&clientAddr, &addrlen) == -1)
+    {
+        printMessage(MessageWindow, "getsockname: '%s'\n", strerror(errno));
+        return false;
+    }
+
+    strncpy(ClientAddress, inet_ntoa(clientAddr.sin_addr), sizeof(ClientAddress));
 
     printMessage(MessageWindow, "Connected to server\n");
     return true;
@@ -331,7 +345,8 @@ bool composeDataPack(enum Command command)
             break;
 
         case ATTENDANCE_START_REQUEST:
-            buildDataPack(&dataPack, Arguments[0], Arguments[2], Arguments[1]);
+            // buildDataPack(&dataPack, Arguments[0], Arguments[2], Arguments[1]);
+            buildDataPack(&dataPack, Arguments[0], NULL, NULL);
             break;
         
         case ATTNEDANCE_STOP_REQUEST:
@@ -345,7 +360,7 @@ bool composeDataPack(enum Command command)
             break;
         
         case ATTENDANCE_CHECK_REQUEST:
-            buildDataPack(&dataPack, Arguments[0], NULL, UserInputBuffer);
+            buildDataPack(&dataPack, ClientAddress, NULL, NULL);
             break;
 
         case CHAT_ENTER_REQUEST:
@@ -396,6 +411,7 @@ bool decomposeDataPack(DataPack *dataPack)
         case USER_LOGOUT_RESPONSE:
             if (dataPack->result)
             {
+                memset(&CurrentUserInfo, 0, sizeof(UserInfo));
                 changeClientStatus(Login);
                 printMessage(MessageWindow, "정상적으로 로그아웃 되었습니다.\n");
             }
@@ -527,7 +543,30 @@ bool decomposeDataPack(DataPack *dataPack)
         case ATTENDANCE_RESULT_RESPONSE:
             if (dataPack->result)
             {
-                printMessage(MessageWindow, "[출석체크 결과]\n%s\n", dataPack->message);
+                if (AttendanceResultLength == 0)
+                {
+                    AttendanceResultLength = atol(dataPack->data1);
+                    memset(AttendanceResultBuffer, 0, sizeof(AttendanceResultBuffer));
+                }
+
+                strcat(AttendanceResultBuffer, dataPack->message);
+
+                if (strlen(AttendanceResultBuffer) == AttendanceResultLength)
+                {
+                    leaveCursesMode();
+                    system("clear");
+                
+                    printf("%s\n", AttendanceResultBuffer);
+                    printf("계속하려면 'q'를 입력하세요\n");
+
+                    while (getch() != 'q')
+                    {
+
+                    }
+                    enterCursesMode();
+                    AttendanceResultLength = 0;
+                    memset(AttendanceResultBuffer, 0, sizeof(AttendanceResultBuffer));
+                }
             }
             else
                 printMessage(MessageWindow, "출석체크 결과를 요청할 수 없습니다. 오류: '%s'\n", dataPack->message);
@@ -698,10 +737,13 @@ void receiveUserCommand()
                     TargetArgument = 2;
                     break;
                 case 2:
-                    setArgumentGuide("학번을 입력하세요", "비밀번호를 입력하세요", "이름을 입력하세요", NULL, NULL);
+                    setArgumentGuide("학번을 입력하세요", "비밀번호를 입력하세요", "이름을 입력하세요 (16Bytes)", NULL, NULL);
                     CurrentRequest = USER_REGISTER_REQUEST;
                     ReceiveArgument = true;
                     TargetArgument = 3;
+                    break;
+                case 0:
+                    exitProgram();
                     break;
                 default:
                     printMessage(MessageWindow, "잘못된 명령어 입력: '%s'\n", UserInputBuffer);
@@ -757,7 +799,7 @@ void receiveUserCommand()
                     composeDataPack(USER_LOGOUT_REQUEST);
                     break;
                 case 0:
-                    //exitProgram();
+                    exitProgram();
                     break;
                 default:
                     printMessage(MessageWindow, "잘못된 명령어 입력: '%s'\n", UserInputBuffer);
@@ -804,7 +846,7 @@ void receiveUserCommand()
                     composeDataPack(USER_LOGOUT_REQUEST);
                     break;
                 case 0:
-                    //exitPrograme();
+                    exitProgram();
                     break;
                 default:
                     printMessage(MessageWindow, "잘못된 명령어 입력: '%s'\n", UserInputBuffer);
@@ -838,10 +880,11 @@ void receiveUserCommand()
             switch (atoi(UserInputBuffer))
             {
                 case 1:
-                    setArgumentGuide("출석 체크를 진행할 시간(분)", "퀴즈 내용을 입력하세요", "퀴즈 정답을 입력하세요", NULL, NULL);
+                    // setArgumentGuide("출석 체크를 진행할 시간(분)", "퀴즈 내용을 입력하세요", "퀴즈 정답을 입력하세요", NULL, NULL);
+                    setArgumentGuide("출석 체크를 진행할 시간(분)", NULL, NULL, NULL, NULL);
                     CurrentRequest = ATTENDANCE_START_REQUEST;
                     ReceiveArgument = true;
-                    TargetArgument = 3;
+                    TargetArgument = 1;
                     break;
                 case 2:
                     composeDataPack(ATTNEDANCE_STOP_REQUEST);
@@ -863,7 +906,7 @@ void receiveUserCommand()
                     composeDataPack(USER_LOGOUT_REQUEST);
                     break;
                 case 0:
-                    //exitPrograme();
+                    exitProgram();
                     break;
                 default:
                     printMessage(MessageWindow, "잘못된 명령어 입력: '%s'\n", UserInputBuffer);
@@ -1020,6 +1063,10 @@ void updateInputByStatus()
 
 void updateLectureStatus()
 {
+    extern bool isCursesMode;
+    if (isCursesMode == false)
+        return;
+
     if (CurrentClientStatus == Lobby || CurrentClientStatus == Chat || CurrentClientStatus == Attendance)
     {
         updateStatus(CurrentLectureInfo.lectureName, CurrentLectureInfo.statusPack.isProfessorOnline, CurrentLectureInfo.statusPack.onlineUserCount, ClientStatusString[CurrentClientStatus]);
@@ -1090,4 +1137,15 @@ void initializeTimer()
     itimer.it_interval.tv_usec = 0;
 
     setitimer(ITIMER_REAL, &itimer, (struct itimerval *)NULL);
+}
+
+void exitProgram()
+{
+    if (CurrentUserInfo.role != USER_NONE)
+    {
+        composeDataPack(USER_LOGOUT_REQUEST);
+    }
+
+    close(ServerSocket);
+    exit(0);
 }
