@@ -185,7 +185,7 @@ Lecture loadLectureByName(char *lectureName, bool *dbResult)
 int loadLectureList(Lecture *lectureList, int amount)
 {
 	char query[512];
-	sprintf(query, "SELECT * FROM `Lecture` LIMIT %d", amount);
+	sprintf(query, "SELECT * FROM `Lecture` ORDER BY lectureID ASC LIMIT %d", amount);
 	executeQuery(query);
 
 	int index = 0;
@@ -217,6 +217,7 @@ bool saveLecture(Lecture *lecture)
 	sprintf(query, "REPLACE INTO `Lecture` (`lectureID`, `lectureName`, `professorID`, `memberCount`, `createDate`) VALUES ('%d', '%s', '%s', '%d', '%ld')",
 		lecture->lectureID, lecture->lectureName, lecture->professorID, lecture->memberCount, lecture->createDate);
 	
+	removeLectureMemberList(lecture);
 	saveLectureMemberList(lecture);
 	
 	return executeQuery(query);
@@ -224,11 +225,12 @@ bool saveLecture(Lecture *lecture)
 
 bool removeLectureByID(int lectureID)
 {
-	char query1[512], query2[512];
+	char query1[512], query2[512], query3[512];
 	sprintf(query1, "DELETE FROM `Lecture` WHERE lectureID = '%d'", lectureID);
 	sprintf(query2, "DELETE FROM `LectureMember` WHERE lectureID = '%d'", lectureID);
+	sprintf(query3, "DELETE FROM `LectureNotice` WHERE lectureID = '%d'", lectureID);
 
-	return executeQuery(query1) && executeQuery(query2);
+	return executeQuery(query1) && executeQuery(query2) && executeQuery(query3);
 }
 
 bool loadLectureMemberList(Lecture *lecture)
@@ -264,6 +266,13 @@ void saveLectureMemberList(Lecture *lecture)
 			lecture->lectureID, lecture->memberList[index]);
 		executeQuery(query);
 	}
+}
+
+void removeLectureMemberList(Lecture *lecture)
+{
+	char query[512];
+	sprintf(query, "DELETE FROM `LectureMember` WHERE lectureID = '%d'", lecture->lectureID);
+	executeQuery(query);
 }
 
 int loadLectureNotice(char noticeList[][512], int amount, int lectureID)
@@ -321,10 +330,10 @@ bool clearLectureNotice()
 
 int loadAttendanceCheckLogList(AttendanceCheckLog *checkLogList, int amount, int lectureID, time_t date)
 {
-	const int SEARCH_RANGE = 12 * 60 * 60;		// 12시간
+	const int SEARCH_RANGE = 6 * 60 * 60;		// 6 시간
 
 	char query[512];
-	sprintf(query, "SELECT * FROM `AttendanceCheckLog` WHERE lectureID = '%d' AND checkDate BETWEEN '%ld' AND '%ld' LIMIT %d", 
+	sprintf(query, "SELECT * FROM `AttendanceCheckLog` WHERE lectureID = '%d' AND checkDate BETWEEN '%ld' AND '%ld' ORDER BY studentID ASC LIMIT %d", 
 		lectureID, date - SEARCH_RANGE, date + SEARCH_RANGE, amount);
 
 	executeQuery(query);
@@ -366,7 +375,7 @@ bool saveAttendanceCheckLog(AttendanceCheckLog *checkLog)
 
 bool removeAttendanceCheckLog(int lectureID, time_t date)
 {
-	const int SEARCH_RANGE = 12 * 60 * 60;		// 12시간
+	const int SEARCH_RANGE = 6 * 60 * 60;		// 6 시간
 
 	char query[512];
 	sprintf(query, "DELETE FROM `AttendanceCheckLog` WHERE lectureID = '%d' AND checkDate BETWEEN '%ld' AND '%ld'", 
