@@ -558,19 +558,23 @@ bool decomposeDataPack(DataPack *dataPack)
 
                 if (strlen(AttendanceResultBuffer) == AttendanceResultLength)
                 {
-                    leaveCursesMode();
-                    system("clear");
-                
-                    printf("%s\n", AttendanceResultBuffer);
-                    printf("계속하려면 'q'를 입력하세요\n");
+                    time_t timeNow;
+                    time(&timeNow);
+                    struct tm *timeData;
+                    timeData = localtime(&timeNow);
 
-                    while (getch() != 'q')
-                    {
+                    char fileName[32];
+                    sprintf(fileName, "AttendanceLog_%02d/%02d %02d:%02d\n", 
+                        timeData->tm_mon + 1, timeData->tm_mday, timeData->tm_hour, timeData->tm_min);
 
-                    }
-                    enterCursesMode();
+                    FILE *file;
+                    file = fopen(fileName, "w");
+                    fputs(AttendanceResultBuffer, file);
+                    fclose(file);
+
                     AttendanceResultLength = 0;
                     memset(AttendanceResultBuffer, 0, sizeof(AttendanceResultBuffer));
+                    printMessage(MessageWindow, "출석체크 결과 파일이 생성되었습니다, 파일: '%s'\n", fileName);
                 }
             }
             else

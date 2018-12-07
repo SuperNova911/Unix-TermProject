@@ -674,6 +674,7 @@ void lectureNoticeSet(int sender, char *lectureName, char *message, UserInfo *us
         return;
     }
 
+    buildDataPack(&dataPack, lectureInfo->lecture.lectureName, NULL, NULL);
     dataPack.result = true;
     sendDataPackToLectureMember(lectureInfo, &dataPack, false);
 
@@ -1096,6 +1097,9 @@ void attendanceResult(int sender, UserInfo *userInfo)
     sprintf(resultMessage, "[출석체크 결과]\n'%d'명의 학생 중 '%d'명이 출석체크 하였습니다.\n", 
         lectureInfo->lecture.memberCount, loaded);
 
+    bool hasChecked[MAX_LECTURE_MEMBER];
+    memset(&hasChecked, 0, sizeof(bool));
+
     char buffer[128];
     struct tm *timeData;
     for (int index = 0; index < loaded; index++)
@@ -1105,6 +1109,25 @@ void attendanceResult(int sender, UserInfo *userInfo)
         sprintf(buffer, "[CHECK] Date: '%02d/%02d %02d:%02d:%02d', ID: '%s', IP: '%s'\n", 
             timeData->tm_mon + 1, timeData->tm_mday, timeData->tm_hour, timeData->tm_min, timeData->tm_sec, checkLogList[index].studentID, checkLogList[index].IP);
         
+        strcat(resultMessage, buffer);
+
+        for (int userIndex = 0; userIndex < lectureInfo->lecture.memberCount; userIndex++)
+        {
+            if (strcmp(lectureInfo->lecture.memberList[userIndex], checkLogList[index].studentID) == 0)
+            {
+                hasChecked[userIndex] = true;
+                break;
+            }
+        }
+    }
+
+    for (int index = 0; index < lectureInfo->lecture.memberCount; index++)
+    {
+        if (hasChecked[index])
+            continue;
+
+        memset(buffer, 0 ,sizeof(buffer));
+        sprintf("[ABSENT] ID: '%s'\n", lectureInfo->lecture.memberList[index]);
         strcat(resultMessage, buffer);
     }
 
