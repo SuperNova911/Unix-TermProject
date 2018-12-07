@@ -1123,11 +1123,13 @@ void attendanceResult(int sender, UserInfo *userInfo)
 
     for (int index = 0; index < lectureInfo->lecture.memberCount; index++)
     {
+        printMessage(MessageWindow, "ID: '%s'\n", lectureInfo->lecture.memberList[index]);
         if (hasChecked[index])
             continue;
+        printMessage(MessageWindow, "ab\n");
 
         memset(buffer, 0 ,sizeof(buffer));
-        sprintf("[ABSENT] ID: '%s'\n", lectureInfo->lecture.memberList[index]);
+        sprintf(buffer, "[ABSENT] ID: '%s'\n", lectureInfo->lecture.memberList[index]);
         strcat(resultMessage, buffer);
     }
 

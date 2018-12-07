@@ -563,8 +563,8 @@ bool decomposeDataPack(DataPack *dataPack)
                     struct tm *timeData;
                     timeData = localtime(&timeNow);
 
-                    char fileName[32];
-                    sprintf(fileName, "AttendanceLog_%02d/%02d %02d:%02d\n", 
+                    char fileName[64];
+                    sprintf(fileName, "AttendanceLog_%02d%02d%02d%02d", 
                         timeData->tm_mon + 1, timeData->tm_mday, timeData->tm_hour, timeData->tm_min);
 
                     FILE *file;
