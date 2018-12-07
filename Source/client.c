@@ -62,6 +62,7 @@ void resetArgument();
 void setArgumentGuide(char *guide1, char *guide2, char *guide3, char *guide4, char *guide5);
 void initializeTimer();
 void exitProgram();
+void loadServerAddress();
 
 extern const char *UserRoleString[4];
 extern const char *CommandString[37];
@@ -85,6 +86,7 @@ int ServerSocket;
 int Fdmax;
 fd_set Master, Reader;
 char ClientAddress[16];
+char ServerAddress[32];
 
 char UserInputGuide[64];
 char UserInputBuffer[256];
@@ -107,6 +109,7 @@ int main()
 
     changeClientStatus(Default);
 
+    loadServerAddress();
     printMessage(MessageWindow, "Try connect to server...\n");
     while (true)
     {
@@ -114,16 +117,18 @@ int main()
             break;
 
         printMessage(MessageWindow, "Cannot connect to server\n");
-        printMessage(InputWindow, "Press any key to reconnect to server");
+        printMessage(InputWindow, "Press any key to reconnect to server\n");
         getchar();
         printMessage(MessageWindow, "Try connect to server...\n");
         sleep(3);
     }
 
+
     sigset(SIGALRM, updateLectureStatus);
     initializeTimer();
 
     changeClientStatus(Login);
+    printMessage(MessageWindow, "Connected to server\n");
 
     async();
 
@@ -170,8 +175,8 @@ bool connectServer()
     memset(&clientAddr, 0, sizeof(struct sockaddr_in));
     clientAddr.sin_family = AF_INET;
     clientAddr.sin_port = htons(SERVER_PORT);
-    clientAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    // clientAddr.sin_addr.s_addr = inet_addr(SERVER_ADDRESS);
+    // clientAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    clientAddr.sin_addr.s_addr = inet_addr(ServerAddress);
 
     // 서버에 연결 요청
     if (connect(ServerSocket, (struct sockaddr *)&clientAddr, sizeof(struct sockaddr_in)) == -1)
@@ -1148,4 +1153,18 @@ void exitProgram()
 
     close(ServerSocket);
     exit(0);
+}
+
+void loadServerAddress()
+{
+    FILE *fileStream;
+    fileStream = fopen(".serverAddress", "r+");
+    if (fileStream == NULL)
+    {
+        printMessage(MessageWindow, "fopen: '%s'\n", strerror(errno));
+        return;
+    }
+
+    fgets(ServerAddress, sizeof(ServerAddress) - 1, fileStream);
+    printMessage(MessageWindow, "ServerAddress: '%s'\n", ServerAddress);
 }
